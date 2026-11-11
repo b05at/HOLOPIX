@@ -10,7 +10,7 @@ Foto-Collage als Bildschirmschoner für Android-Tablets (ab Android 10). HOLOPIX
 | Fotoquellen | **Ordner am Gerät** (Galerie/Kamera/Album-Ordner über die Android-Ordnerauswahl, mehrere möglich, ohne Speicher-Berechtigung) und/oder **SMB-Freigabe** (SMB2/3 über jcifs-ng, optional SMB1/Gast) mit Schritt-für-Schritt-Verbindungstest. Beide werden gemischt. |
 | Smarte Collage | Probiert Kombinationen aus 1–5 Fotos desselben Ordners und Anordnungen (neben-/übereinander, verschachtelt) und nimmt die, die am besten zum Bildschirm passt – kaum Beschnitt, keine schwarzen Ränder. Serienbilder nicht nebeneinander, Gesichter bleiben im Bild, Ken-Burns-Zoom. Passt nichts, wird das Foto ganz mit unscharfem Hintergrund gezeigt. |
 | Overlay | Uhr, Datum, Bildunterschrift (Ordner & Aufnahmedatum) einzeln schaltbar; Position (5 Ecken/Mitte oder geteilt) und Größe wählbar; Einbrennschutz. |
-| Widgets (optional) | **Wetter** (Open-Meteo, kostenlos, ohne Schlüssel) und **Einkaufsliste** (Bring!, Liste wählbar) als Zeilen im Bildschirmschoner – keine eigenen Seiten. |
+| Wetter-Widget (optional) | Open-Meteo (kostenlos, ohne Schlüssel) als Zeile im Bildschirmschoner – keine eigene Seite. |
 | Updater | Prüft `github.com/b05at/HOLOPIX/releases/latest`, meldet neue Versionen per Benachrichtigung und installiert sie aus den Einstellungen. |
 | Absturzprotokoll | Speichert den letzten Absturz (in den Einstellungen anzeigen/kopieren) und startet den Dienst neu. |
 

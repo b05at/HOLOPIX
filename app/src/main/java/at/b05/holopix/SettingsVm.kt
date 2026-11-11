@@ -8,7 +8,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import at.b05.holopix.data.BringList
 import at.b05.holopix.data.SmbSource
 import at.b05.holopix.data.SmbStep
 import at.b05.holopix.screensaver.OverlayStyle
@@ -119,37 +118,6 @@ class SettingsVm(app: Application) : AndroidViewModel(app) {
         message = "Wetterort: ${p.name}"
     }
     fun refreshWeather() = safe { Holo.refreshWeather(force = true) }
-
-    // ---------- Bring!-Widget ----------
-
-    var bringConfigured by mutableStateOf(prefs.bringConfigured)
-        private set
-    var bringLists by mutableStateOf<List<BringList>>(emptyList())
-        private set
-    var bringListUuid by mutableStateOf(prefs.bringListUuid)
-        private set
-
-    fun bringLogin(email: String, password: String) = safe {
-        Holo.bring.login(email.trim(), password)
-        bringConfigured = true
-        bringLists = Holo.bring.lists()
-        if (prefs.bringListUuid.isBlank()) prefs.bringListUuid = bringLists.firstOrNull()?.uuid ?: ""
-        prefs.bringListName = bringLists.firstOrNull { it.uuid == prefs.bringListUuid }?.name ?: ""
-        bringListUuid = prefs.bringListUuid
-        message = "Bring! verbunden" + (prefs.bringListName.takeIf { it.isNotBlank() }?.let { " · Liste „$it“" } ?: "")
-        Holo.refreshShopping(force = true)
-    }
-
-    fun bringLogout() {
-        Holo.bring.logout(); bringConfigured = false; bringLists = emptyList(); bringListUuid = ""; Holo.shopping = null
-    }
-
-    fun selectBringList(l: BringList) {
-        prefs.bringListUuid = l.uuid; prefs.bringListName = l.name; bringListUuid = l.uuid
-        safe { Holo.refreshShopping(force = true) }
-    }
-
-    fun loadBringLists() = safe { bringLists = Holo.bring.lists() }
 
     // ---------- Darstellung ----------
 

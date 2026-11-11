@@ -37,7 +37,6 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import at.b05.holopix.SettingsVm
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -73,39 +72,3 @@ fun PasswordField(value: String, onChange: (String) -> Unit, label: String, modi
     )
 }
 
-/** Bring!: anmelden bzw. verbundenes Konto + Auswahl der Einkaufsliste. */
-@Composable
-fun BringSetup(vm: SettingsVm) {
-    if (!vm.bringConfigured) {
-        var email by remember { mutableStateOf(vm.prefs.bringEmail) }
-        var pw by remember { mutableStateOf(vm.prefs.bringPassword) }
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text("Mit deinem Bring!-Konto anmelden (E-Mail + Passwort).", color = Z.TextSoft)
-            OutlinedTextField(
-                email, { email = it }, label = { Text("E-Mail") }, singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
-                modifier = Modifier.fillMaxWidth().keepVisibleWhenFocused(),
-            )
-            PasswordField(pw, { pw = it }, "Passwort", Modifier.fillMaxWidth())
-            Button(onClick = { vm.bringLogin(email, pw) }, enabled = email.isNotBlank() && pw.isNotBlank()) { Text("Verbinden") }
-        }
-        return
-    }
-    LaunchedEffect(Unit) { if (vm.bringLists.isEmpty()) vm.loadBringLists() }
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Verbunden: ${vm.prefs.bringEmail}", Modifier.weight(1f), color = Z.Text)
-            OutlinedButton(onClick = { vm.bringLogout() }) { Text("Trennen") }
-        }
-        Text("Einkaufsliste", color = Z.Text, fontWeight = FontWeight.Medium)
-        if (vm.bringLists.isEmpty()) {
-            Text("Listen werden geladen …", color = Z.TextSoft, fontSize = 14.sp)
-        } else {
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                vm.bringLists.forEach { l ->
-                    FilterChip(selected = l.uuid == vm.bringListUuid, onClick = { vm.selectBringList(l) }, label = { Text(l.name) })
-                }
-            }
-        }
-    }
-}

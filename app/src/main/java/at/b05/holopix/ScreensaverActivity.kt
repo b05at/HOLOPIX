@@ -14,7 +14,6 @@ import androidx.lifecycle.lifecycleScope
 import at.b05.holopix.screensaver.OverlayStyle
 import at.b05.holopix.screensaver.ScreensaverView
 import at.b05.holopix.screensaver.SlideShow
-import at.b05.holopix.screensaver.shoppingLine
 import at.b05.holopix.screensaver.weatherLine
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -45,7 +44,6 @@ class ScreensaverActivity : ComponentActivity() {
             val now by produceState(LocalDateTime.now()) { while (true) { value = LocalDateTime.now(); delay(1000) } }
             val info = buildList<Pair<androidx.compose.ui.graphics.vector.ImageVector, String>> {
                 if (p.ssShowWeather) Holo.weather?.let { add(weatherLine(it)) }
-                if (p.ssShowShopping) Holo.shopping?.let { shoppingLine(it) }?.let { add(it) }
             }
             ScreensaverView(
                 slide = show.slide,
@@ -69,7 +67,6 @@ class ScreensaverActivity : ComponentActivity() {
         widgetJob = lifecycleScope.launch {
             while (isActive) {
                 if (Holo.prefs.ssShowWeather) Holo.refreshWeather()
-                if (Holo.prefs.ssShowShopping) Holo.refreshShopping()
                 delay(60_000)
             }
         }

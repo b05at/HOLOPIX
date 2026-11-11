@@ -137,11 +137,6 @@ fun SettingsScreen(vm: SettingsVm) {
                 }
                 OverlaySection(vm)
                 WeatherSection(vm)
-                Section("Widget · Einkaufsliste (Bring!)") {
-                    var on by remember { mutableStateOf(p.ssShowShopping) }
-                    SwitchRow("Im Bildschirmschoner anzeigen", on) { on = it; p.ssShowShopping = it }
-                    if (on) BringSetup(vm)
-                }
                 Section("Darstellung") {
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         listOf("system" to "Wie System", "light" to "Hell", "dark" to "Dunkel").forEach { (k, l) ->
@@ -384,7 +379,7 @@ private fun OverlaySection(vm: SettingsVm) {
         SwitchRow("Datum", date) { date = it; p.ssShowDate = it }
         SwitchRow("Bildunterschrift (Ordner & Aufnahmedatum)", st.showCaption) { vm.updateOverlayStyle(st.copy(showCaption = it)) }
         SwitchRow("Einbrennschutz (Overlay wandert minimal)", st.shift) { vm.updateOverlayStyle(st.copy(shift = it)) }
-        Hint("Wetter und Einkaufsliste lassen sich unten als Widget dazuschalten.")
+        Hint("Das Wetter lässt sich unten als Widget dazuschalten.")
     }
 }
 
@@ -407,7 +402,7 @@ private fun OverlayPreview(position: String, size: Int, onPick: (String) -> Unit
                 if (selected) {
                     Column(horizontalAlignment = when (k) { "tr", "br" -> Alignment.End; "bc" -> Alignment.CenterHorizontally; else -> Alignment.Start }) {
                         Text("12:34", color = Color.White, fontSize = clockSize, fontWeight = FontWeight.Light)
-                        if (position != "split") Text("☀ 6° · Milch, Brot", color = Color.White.copy(alpha = 0.8f), fontSize = 9.sp)
+                        if (position != "split") Text("☀ 6° · bewölkt", color = Color.White.copy(alpha = 0.8f), fontSize = 9.sp)
                     }
                 } else {
                     Box(Modifier.size(18.dp).background(Color.White.copy(alpha = 0.35f), CircleShape))
@@ -415,7 +410,7 @@ private fun OverlayPreview(position: String, size: Int, onPick: (String) -> Unit
             }
         }
         if (position == "split") {
-            Text("☀ 6° · Milch, Brot", color = Color.White.copy(alpha = 0.8f), fontSize = 9.sp, modifier = Modifier.align(Alignment.BottomEnd).padding(4.dp))
+            Text("☀ 6° · bewölkt", color = Color.White.copy(alpha = 0.8f), fontSize = 9.sp, modifier = Modifier.align(Alignment.BottomEnd).padding(4.dp))
         }
     }
 }

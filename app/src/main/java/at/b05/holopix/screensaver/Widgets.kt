@@ -4,7 +4,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AcUnit
 import androidx.compose.material.icons.rounded.Cloud
 import androidx.compose.material.icons.rounded.NightsStay
-import androidx.compose.material.icons.rounded.ShoppingCart
 import androidx.compose.material.icons.rounded.Thunderstorm
 import androidx.compose.material.icons.rounded.WaterDrop
 import androidx.compose.material.icons.rounded.WbCloudy
@@ -32,11 +31,4 @@ fun weatherLine(w: Weather): Pair<ImageVector, String> {
         if (today.rainProb >= 20) parts += "Regen ${today.rainProb} %"
     }
     return weatherIcon(w.code, w.isDay) to parts.joinToString(" · ")
-}
-
-/** Einkaufsliste kompakt: „Milch, Eier, Brot +4“. */
-fun shoppingLine(items: List<String>): Pair<ImageVector, String>? {
-    if (items.isEmpty()) return null
-    val shown = items.take(4).joinToString(", ")
-    return Icons.Rounded.ShoppingCart to (if (items.size > 4) "$shown +${items.size - 4}" else shown)
 }

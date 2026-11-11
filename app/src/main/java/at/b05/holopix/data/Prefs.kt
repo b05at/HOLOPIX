@@ -53,7 +53,6 @@ class Prefs(context: Context) {
     var ssShowClock by B("ss_clock", true)
     var ssShowDate by B("ss_date", true)
     var ssShowWeather by B("ss_weather", false)
-    var ssShowShopping by B("ss_shopping", false)
     var ssOverlayPos by S("ss_pos", "split")   // bl | bc | br | tl | tr | split
     var ssOverlaySize by I("ss_size", 1)       // 0 klein, 1 mittel, 2 groß
     var ssShowCaption by B("ss_caption", true)
@@ -64,19 +63,10 @@ class Prefs(context: Context) {
     var weatherLat by S("w_lat", "47.5034")
     var weatherLon by S("w_lon", "16.5034")
 
-    // Bring!-Widget
-    var bringEmail by S("bring_email")
-    var bringPassword by S("bring_pw")
-    var bringToken by S("bring_token")
-    var bringUserUuid by S("bring_uuid")
-    var bringListUuid by S("bring_list")
-    var bringListName by S("bring_list_name")
-
     // Darstellung & Updates
     var themeMode by S("theme", "system")
     var autoUpdate by B("auto_update", true)
     var githubToken by S("gh_token")
 
     val smbConfigured: Boolean get() = SmbSource.parse(smbHost, smbShare, smbPath).let { it.host.isNotBlank() && it.share.isNotBlank() }
-    val bringConfigured: Boolean get() = bringEmail.isNotBlank() && bringPassword.isNotBlank()
 }
