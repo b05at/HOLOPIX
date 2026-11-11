@@ -74,6 +74,8 @@ class ScreensaverOverlay(private val context: Context) {
         v.setViewTreeLifecycleOwner(o)
         v.setViewTreeSavedStateRegistryOwner(o)
         v.setViewTreeViewModelStoreOwner(o)
+        // ganze Fensterfläche schwarz (auch neben/unter der Navigationsleiste – sonst bleiben dort Pixelreste sichtbar)
+        v.setBackgroundColor(android.graphics.Color.BLACK)
         v.setContent { ScreensaverContent(slides, onTick = { updateKeepOn() }, onDismiss = { hide() }) }
         v.systemUiVisibility = View.SYSTEM_UI_FLAG_FULLSCREEN or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
             View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or View.SYSTEM_UI_FLAG_LAYOUT_STABLE
@@ -93,6 +95,7 @@ class ScreensaverOverlay(private val context: Context) {
         return try {
             o.start()
             wm.addView(v, lp)
+            hideBars(v)
             view = v; owner = o; scope = sc; params = lp; keepOn = true
             Holo.screensaverShowing = true
             Holo.screensaverFinisher = { hide() }
@@ -108,6 +111,18 @@ class ScreensaverOverlay(private val context: Context) {
             o.stop(); sc.cancel()
             Holo.lastStartError = "Overlay: ${e.message ?: e.javaClass.simpleName}"
             false
+        }
+    }
+
+    /** System- und Navigationsleiste ausblenden (Wischen vom Rand holt sie kurz zurück). */
+    private fun hideBars(v: View) {
+        if (Build.VERSION.SDK_INT >= 30) {
+            v.post {
+                v.windowInsetsController?.let {
+                    it.systemBarsBehavior = android.view.WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                    it.hide(android.view.WindowInsets.Type.systemBars())
+                }
+            }
         }
     }
 
