@@ -74,26 +74,36 @@ class ScreensaverOverlay(private val context: Context) {
         v.setViewTreeViewModelStoreOwner(o)
         // ganze Fensterfläche schwarz (auch neben/unter der Navigationsleiste – sonst bleiben dort Pixelreste sichtbar)
         v.setBackgroundColor(android.graphics.Color.BLACK)
-        v.setContent { ScreensaverContent(slides, onTick = { updateKeepOn() }, onDismiss = { hide() }) }
+        // Zurück-/Lautstärketasten beenden den Bildschirmschoner ebenfalls
+        v.isFocusableInTouchMode = true
+        v.setOnKeyListener { _, _, e -> if (e.action == android.view.KeyEvent.ACTION_UP) hide(); true }
+        v.setContent { ScreensaverContent(slides, onTick = { updateKeepOn(); fitScreen() }, onDismiss = { hide() }) }
         v.systemUiVisibility = View.SYSTEM_UI_FLAG_FULLSCREEN or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
             View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+        // volle Bildschirmgröße (inkl. Bereich von Status- und Navigationsleiste)
+        val full = ScreenProfile.of(context)
         val lp = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.MATCH_PARENT,
+            full.widthPx, full.heightPx,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+            // fokussierbar: nur das fokussierte Fenster darf die Systemleisten ausblenden
+            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
                 WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
                 WindowManager.LayoutParams.FLAG_FULLSCREEN or
                 WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON,
             PixelFormat.OPAQUE,
         ).apply {
+            gravity = android.view.Gravity.TOP or android.view.Gravity.START
+            x = 0; y = 0
             if (Build.VERSION.SDK_INT >= 28) layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+            // Android verkleinert Overlays sonst um die Systemleisten → Streifen unten/oben
+            if (Build.VERSION.SDK_INT >= 30) { fitInsetsTypes = 0; fitInsetsSides = 0; isFitInsetsIgnoringVisibility = true }
             windowAnimations = android.R.style.Animation_Dialog
         }
         return try {
             o.start()
             wm.addView(v, lp)
             hideBars(v)
+            v.requestFocus()
             view = v; owner = o; scope = sc; params = lp; keepOn = true
             Holo.screensaverShowing = true
             Holo.screensaverFinisher = { hide() }
@@ -122,6 +132,16 @@ class ScreensaverOverlay(private val context: Context) {
                 }
             }
         }
+    }
+
+    /** Fenstergröße an gedrehten Bildschirm anpassen. */
+    private fun fitScreen() {
+        val v = view ?: return
+        val lp = params ?: return
+        val full = ScreenProfile.of(context)
+        if (lp.width == full.widthPx && lp.height == full.heightPx) return
+        lp.width = full.widthPx; lp.height = full.heightPx
+        try { context.getSystemService(WindowManager::class.java).updateViewLayout(v, lp); hideBars(v) } catch (e: Exception) { }
     }
 
     /** Außerhalb des Zeitplans das Display freigeben (Android-Zeitlimit greift). */
