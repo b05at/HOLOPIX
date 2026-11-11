@@ -46,7 +46,10 @@ class IdleService : Service() {
         override fun onReceive(c: Context, i: Intent) {
             // Bildschirm an / entsperrt zählt als Bedienung
             Holo.onUserActivity()
-            if (i.action == Intent.ACTION_SCREEN_ON) skipKeyguard()
+            if (i.action == Intent.ACTION_SCREEN_ON) {
+                skipKeyguard()
+                if (Holo.prefs.kioskMode) handler.postDelayed({ try { check() } catch (e: Exception) { } }, 300)
+            }
         }
     }
 
@@ -117,11 +120,17 @@ class IdleService : Service() {
             val ds = at.b05.holopix.display.DisplaySchedule
             " · außerhalb des Zeitplans (heute ${ds.todayText(ds.fromJson(p.displayPlan))}): Display geht nach dem Android-Zeitlimit aus"
         }
-        if (!p.enabled && !p.visitorMode) { status("Automatischer Start ist aus"); return }
-        if (Holo.screensaverShowing) { status("Bildschirmschoner läuft$outside"); return }
+        if (!p.enabled && !p.visitorMode && !p.kioskMode) { status("Automatischer Start ist aus"); return }
+        val kiosk = if (p.kioskMode) "Kiosk-Modus · " else ""
+        if (Holo.screensaverShowing) { status("${kiosk}Bildschirmschoner läuft$outside"); return }
         if (!Settings.canDrawOverlays(this)) { status("Berechtigung „Über anderen Apps einblenden“ fehlt"); return }
         if (!Holo.photos.ready) { status("Keine Fotoquelle eingerichtet"); return }
-        if (!pm.isInteractive) { status("Display ist aus"); return }
+        if (!pm.isInteractive) { status("${kiosk}Display ist aus"); return }
+        if (p.kioskMode) {
+            // Kiosk: sofort (ohne Leerlaufzeit) wieder anzeigen
+            if (!overlayShow.show()) Holo.startScreensaver(this)
+            return
+        }
         if (idle < need) {
             status("Start in ${fmt(need - idle)} (ohne Bedienung seit ${fmt(idle)})" + outside + (Holo.lastStartError?.let { " · Letzter Fehler: $it" } ?: ""))
             return

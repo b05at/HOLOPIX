@@ -12,6 +12,7 @@ import androidx.compose.foundation.background
 import androidx.compose.ui.draw.clip
 import androidx.compose.material3.Checkbox
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Celebration
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -130,6 +131,7 @@ fun SettingsScreen(vm: SettingsVm) {
                 vm.lastCrash?.let { CrashSection(vm, it) }
                 ServiceSection(vm)
                 VisitorSection(vm)
+                KioskSection(vm)
                 DisplayScheduleSection(vm)
                 LocalFolderSection(vm)
                 SmbSection(vm)
@@ -192,6 +194,14 @@ private fun Header(vm: SettingsVm) {
             Icon(Icons.Rounded.Celebration, if (vm.visitorMode) "Besuchermodus an – zum Ausschalten tippen" else "Besuchermodus einschalten",
                 tint = if (vm.visitorMode) Z.OnPrimary else Z.TextSoft)
         }
+        // Kiosk-Modus: gleicher Stil, Schloss-Symbol
+        IconButton(
+            onClick = { vm.toggleKiosk() },
+            modifier = Modifier.clip(CircleShape).background(if (vm.kioskMode) Z.Primary else Color.Transparent),
+        ) {
+            Icon(Icons.Rounded.Lock, if (vm.kioskMode) "Kiosk-Modus an" else "Kiosk-Modus einschalten",
+                tint = if (vm.kioskMode) Z.OnPrimary else Z.TextSoft)
+        }
         Spacer(Modifier.width(8.dp))
         Button(onClick = { vm.startNow() }) { Text("Jetzt starten") }
     }
@@ -235,6 +245,23 @@ private fun ServiceSection(vm: SettingsVm) {
         Hint("Der Bildschirmschoner erscheint über dem Sperrbildschirm; eine Wischsperre (ohne PIN/Muster) wird beim Einschalten und beim Beenden " +
             "automatisch weggeblendet. Mit PIN/Muster lässt Android das aus Sicherheitsgründen nicht zu.")
         Permissions(vm)
+    }
+}
+
+@Composable
+private fun KioskSection(vm: SettingsVm) {
+    Section("Kiosk-Modus") {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                if (vm.kioskMode) "An – das Tablet zeigt nur den Bildschirmschoner. Zum Beenden 4× schnell auf den Bildschirm tippen."
+                else "Aus – einschalten, damit das Tablet nur noch den Bildschirmschoner zeigt (Antippen und Tasten beenden ihn nicht).",
+                Modifier.weight(1f), color = Z.Text, fontSize = 15.sp,
+            )
+            Switch(vm.kioskMode, { vm.toggleKiosk() })
+        }
+        Hint("Display-Zeitplan, Wecken und Einschalten von Hand bleiben wie eingestellt: im Zeitraum bleibt das Display an, außerhalb " +
+            "schaltet Android es nach seinem Zeitlimit aus. Sobald das Display an ist, erscheint sofort der Bildschirmschoner. " +
+            "Auch über das Schloss-Symbol oben schaltbar.")
     }
 }
 

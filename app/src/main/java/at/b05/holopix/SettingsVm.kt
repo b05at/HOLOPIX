@@ -51,6 +51,16 @@ class SettingsVm(app: Application) : AndroidViewModel(app) {
         else "Besuchermodus aus – Display-Zeitplan gilt wieder"
     }
 
+    // ---------- Kiosk-Modus ----------
+
+    val kioskMode get() = Holo.kioskMode
+    fun toggleKiosk() {
+        val on = !Holo.kioskMode
+        if (on && !Holo.photos.ready) { message = "Zuerst eine Fotoquelle einrichten"; return }
+        Holo.setKiosk(ctx, on)
+        message = if (on) "Kiosk-Modus an – zum Beenden 4× schnell auf den Bildschirm tippen" else "Kiosk-Modus aus"
+    }
+
     // ---------- Display-Zeitplan ----------
 
     var displayScheduleEnabled by mutableStateOf(prefs.displayScheduleEnabled)

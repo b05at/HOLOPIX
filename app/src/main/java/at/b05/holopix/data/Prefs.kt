@@ -38,6 +38,8 @@ class Prefs(context: Context) {
     var displayPlan by S("disp_plan")
     /** Besuchermodus: Display und Bildschirmschoner bleiben an, Zeitplan pausiert – bis er wieder ausgeschaltet wird. */
     var visitorMode by B("visitor", false)
+    /** Kiosk-Modus: Bildschirmschoner dauerhaft, Beenden nur durch 4× Tippen. Zeitplan & Einschaltverhalten bleiben. */
+    var kioskMode by B("kiosk", false)
     /** Sperrbildschirm überspringen (Wischsperre automatisch wegblenden, Bildschirmschoner über dem Sperrbildschirm). */
     var skipKeyguard by B("skip_keyguard", true)
 

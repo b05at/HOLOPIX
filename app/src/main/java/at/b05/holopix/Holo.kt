@@ -50,6 +50,7 @@ object Holo {
         photos = MultiPhotoSource(smb, LocalPhotoSource(a, prefs, smb), prefs)
         collage = CollageEngine(photos)
         visitorMode = prefs.visitorMode
+        kioskMode = prefs.kioskMode
     }
 
     /** Letzte Bedienung (Berührung irgendwo, Bildschirm eingeschaltet, Bildschirmschoner beendet). */
@@ -101,8 +102,25 @@ object Holo {
         IdleService.refresh(c)
     }
 
-    /** Hintergrunddienst nötig: automatischer Bildschirmschoner, Zeitplan oder Besuchermodus. */
-    fun serviceNeeded(): Boolean = prefs.enabled || prefs.displayScheduleEnabled || prefs.visitorMode
+    /**
+     * Kiosk-Modus: Sobald das Display an ist, wird der Bildschirmschoner gezeigt; Antippen und Tasten beenden ihn nicht,
+     * erst 4× schnelles Tippen schaltet den Kiosk-Modus aus. Zeitplan, Wecken und Android-Zeitlimit bleiben unverändert.
+     */
+    var kioskMode by mutableStateOf(false)
+        private set
+
+    fun setKiosk(c: Context, on: Boolean) {
+        kioskMode = on; prefs.kioskMode = on
+        onUserActivity()
+        IdleService.refresh(c)
+        if (on && photos.ready) {
+            // sofort starten (aus den Einstellungen heraus)
+            startScreensaver(c)
+        }
+    }
+
+    /** Hintergrunddienst nötig: automatischer Bildschirmschoner, Zeitplan, Besucher- oder Kiosk-Modus. */
+    fun serviceNeeded(): Boolean = prefs.enabled || prefs.displayScheduleEnabled || prefs.visitorMode || prefs.kioskMode
 
     /** Laut Zeitplan (oder Besuchermodus) soll das Display jetzt an sein. */
     fun scheduleOn(): Boolean = prefs.visitorMode || !prefs.displayScheduleEnabled ||

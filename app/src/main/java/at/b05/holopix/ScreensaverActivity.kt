@@ -91,7 +91,8 @@ class ScreensaverActivity : ComponentActivity() {
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
-        finishScreensaver(); return true
+        if (!Holo.kioskMode) finishScreensaver()
+        return true
     }
 
     private fun finishScreensaver() {
