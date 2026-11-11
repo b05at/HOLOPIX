@@ -568,6 +568,9 @@ private fun DisplayScheduleSection(vm: SettingsVm) {
                     }
                 }
             }
+            val nowOn = at.b05.holopix.display.DisplaySchedule.isOn(vm.displayPlans, java.time.LocalDateTime.now())
+            Text("Jetzt laut Zeitplan: Display ${if (nowOn) "an – Bildschirmschoner aktiv" else "aus – kein Bildschirmschoner"} · " +
+                at.b05.holopix.display.DisplaySchedule.todayText(vm.displayPlans), color = if (nowOn) Z.Primary else Z.Warn, fontSize = 14.sp)
             vm.nextDisplayChangeText()?.let { Text(it, color = Z.TextSoft, fontSize = 14.sp) }
             WakeChecklist(vm)
         }

@@ -111,7 +111,12 @@ class IdleService : Service() {
         fun status(s: String) { Holo.serviceStatus = s }
         // außerhalb eines Zeitraums (und ohne Besuchermodus): kein Bildschirmschoner,
         // Display wird nicht wach gehalten → Android schaltet nach seinem Zeitlimit ab
-        if (!Holo.scheduleOn()) { status("Außerhalb des Display-Zeitplans – kein Bildschirmschoner"); updateWakeLock(false); return }
+        if (!Holo.scheduleOn()) {
+            val ds = at.b05.holopix.display.DisplaySchedule
+            status("Außerhalb des Display-Zeitplans – kein Bildschirmschoner (heute ${ds.todayText(ds.fromJson(p.displayPlan))}). " +
+                "Zeitraum für heute eintragen, Zeitplan ausschalten oder Besuchermodus nutzen.")
+            updateWakeLock(false); return
+        }
         updateWakeLock(p.visitorMode || p.keepScreenOn)
         if (!p.enabled && !p.visitorMode) { status("Automatischer Start ist aus"); return }
         if (Holo.screensaverShowing) { status("Bildschirmschoner läuft"); return }

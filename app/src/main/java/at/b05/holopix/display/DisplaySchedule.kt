@@ -73,6 +73,17 @@ object DisplaySchedule {
         return p.windows.any { it.contains(t) }
     }
 
+    /** Heutiger Plan als Text, z. B. „Mittwoch: 06:00–08:30, 16:00–22:00“ oder „Mittwoch: nicht angehakt (aus)“. */
+    fun todayText(plans: List<DayPlan>, at: LocalDateTime = LocalDateTime.now()): String {
+        val day = at.dayOfWeek.getDisplayName(java.time.format.TextStyle.FULL, java.util.Locale.GERMAN)
+        val p = plans[at.dayOfWeek.value - 1]
+        return when {
+            !p.active -> "$day: nicht angehakt (Display aus)"
+            p.windows.isEmpty() -> "$day: kein Zeitraum (Display aus)"
+            else -> "$day: " + p.windows.joinToString(", ") { "${it.on}–${it.off}" }
+        }
+    }
+
     /** Nächster Zeitpunkt, an dem sich der Soll-Zustand ändert (innerhalb von 8 Tagen). */
     fun nextChange(plans: List<DayPlan>, from: LocalDateTime): LocalDateTime? {
         val now = isOn(plans, from)
