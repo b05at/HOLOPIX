@@ -536,14 +536,14 @@ private fun DisplayScheduleSection(vm: SettingsVm) {
             Hint("Pro Wochentag einen oder mehrere Zeiträume, in denen das Display an ist (z. B. 06:00–08:30 und 16:00–22:00). " +
                 "Zu Beginn eines Zeitraums weckt HOLOPIX das Display und startet den Bildschirmschoner. Außerhalb eines Zeitraums " +
                 "startet kein Bildschirmschoner und Android schaltet das Display nach seinem eingestellten Zeitlimit aus " +
-                "(Einstellungen → Display → Bildschirm-Zeitlimit). Ohne Zeitraum bleibt das Display an diesem Tag aus, " +
-                "Tag nicht angehakt = ganztägig an. Der Besuchermodus hebt den Zeitplan auf.")
+                "(Einstellungen → Display → Bildschirm-Zeitlimit). Tag nicht angehakt oder ohne Zeitraum = Display bleibt " +
+                "an diesem Tag aus. Ganztägig an: Zeitraum 00:00–00:00. Der Besuchermodus hebt den Zeitplan auf.")
             vm.displayPlans.forEachIndexed { i, plan ->
                 Column(Modifier.fillMaxWidth().background(Z.Chip, RoundedCornerShape(12.dp)).padding(8.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Checkbox(checked = plan.active, onCheckedChange = { vm.setDayPlan(i, plan.copy(active = it)) })
                         Text(WEEKDAYS[i], color = Z.Text, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
-                        if (!plan.active) Text("ganztägig an", color = Z.TextSoft)
+                        if (!plan.active) Text("Display bleibt aus", color = Z.TextSoft)
                         else {
                             TextButton(onClick = {
                                 val last = plan.windows.lastOrNull()

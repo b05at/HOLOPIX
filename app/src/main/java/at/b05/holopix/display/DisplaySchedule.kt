@@ -28,8 +28,7 @@ data class OnWindow(val on: LocalTime, val off: LocalTime) {
 
 /**
  * Plan für einen Wochentag: ein oder mehrere Zeiträume, in denen das Display an ist
- * (z. B. 06:00–08:30 und 16:00–22:00). Inaktiver Tag = Display den ganzen Tag an,
- * aktiver Tag ohne Zeitraum = Display bleibt aus.
+ * (z. B. 06:00–08:30 und 16:00–22:00). Tag nicht angehakt oder ohne Zeitraum = Display bleibt aus.
  */
 data class DayPlan(val active: Boolean, val windows: List<OnWindow>) {
     // Kompatibilität mit älterem Code / Einstellungen mit nur einem Zeitraum
@@ -68,8 +67,8 @@ object DisplaySchedule {
     /** Soll das Display zu diesem Zeitpunkt laut Plan an sein? (Index 0 = Montag) */
     fun isOn(plans: List<DayPlan>, at: LocalDateTime): Boolean {
         val p = plans[at.dayOfWeek.value - 1]
-        if (!p.active) return true          // Tag ohne Zeitplan: ganztägig an
-        if (p.windows.isEmpty()) return false // Zeitplan ohne Zeitraum: Display bleibt aus
+        // Tag nicht angehakt oder ohne Zeitraum: Display bleibt aus (ganztägig an = Zeitraum 00:00–00:00)
+        if (!p.active || p.windows.isEmpty()) return false
         val t = at.toLocalTime()
         return p.windows.any { it.contains(t) }
     }
