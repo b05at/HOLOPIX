@@ -220,9 +220,10 @@ private fun ServiceSection(vm: SettingsVm) {
         val sysTimeout = remember(tick) {
             try { Settings.System.getInt(ctx.contentResolver, Settings.System.SCREEN_OFF_TIMEOUT) } catch (e: Exception) { -1 }
         }
-        if (!keepOn && sysTimeout in 1 until minutes * 60_000) {
-            Text("Achtung: Android schaltet das Display schon nach ${sysTimeout / 1000} s aus – vorher kommt der Bildschirmschoner nicht. " +
-                "„Display nicht automatisch ausschalten“ einschalten oder die Bildschirm-Zeitüberschreitung in den Android-Einstellungen verlängern.",
+        if (sysTimeout in 1 until minutes * 60_000 && (!keepOn || vm.displayScheduleEnabled)) {
+            Text("Achtung: Android schaltet das Display schon nach ${sysTimeout / 1000} s aus – vorher kommt der Bildschirmschoner nicht" +
+                (if (keepOn) " (gilt außerhalb des Display-Zeitplans)" else "") + ". Das Bildschirm-Zeitlimit in den Android-Einstellungen länger " +
+                "als die Leerlaufzeit stellen" + (if (keepOn) "." else " oder „Display nicht automatisch ausschalten“ einschalten."),
                 color = Z.Warn, fontSize = 14.sp)
         }
         var skipLock by remember { mutableStateOf(p.skipKeyguard) }
@@ -535,8 +536,8 @@ private fun DisplayScheduleSection(vm: SettingsVm) {
         if (vm.displayScheduleEnabled) {
             Hint("Pro Wochentag einen oder mehrere Zeiträume, in denen das Display an ist (z. B. 06:00–08:30 und 16:00–22:00). " +
                 "Zu Beginn eines Zeitraums weckt HOLOPIX das Display und startet den Bildschirmschoner. Außerhalb eines Zeitraums " +
-                "startet kein Bildschirmschoner und Android schaltet das Display nach seinem eingestellten Zeitlimit aus " +
-                "(Einstellungen → Display → Bildschirm-Zeitlimit). Tag nicht angehakt oder ohne Zeitraum = Display bleibt " +
+                "wird das Display nicht geweckt und nicht wach gehalten: schaltest du es selbst ein, startet der Bildschirmschoner nach der " +
+                "eingestellten Zeit trotzdem, Android schaltet das Display aber nach seinem Zeitlimit aus (Einstellungen → Display → Bildschirm-Zeitlimit). Tag nicht angehakt oder ohne Zeitraum = Display bleibt " +
                 "an diesem Tag aus. Ganztägig an: Zeitraum 00:00–00:00. Der Besuchermodus hebt den Zeitplan auf.")
             vm.displayPlans.forEachIndexed { i, plan ->
                 Column(Modifier.fillMaxWidth().background(Z.Chip, RoundedCornerShape(12.dp)).padding(8.dp)) {
@@ -569,7 +570,7 @@ private fun DisplayScheduleSection(vm: SettingsVm) {
                 }
             }
             val nowOn = at.b05.holopix.display.DisplaySchedule.isOn(vm.displayPlans, java.time.LocalDateTime.now())
-            Text("Jetzt laut Zeitplan: Display ${if (nowOn) "an – Bildschirmschoner aktiv" else "aus – kein Bildschirmschoner"} · " +
+            Text("Jetzt laut Zeitplan: Display ${if (nowOn) "an – Bildschirmschoner aktiv" else "aus – nur nach Einschalten von Hand, bis zum Android-Zeitlimit"} · " +
                 at.b05.holopix.display.DisplaySchedule.todayText(vm.displayPlans), color = if (nowOn) Z.Primary else Z.Warn, fontSize = 14.sp)
             vm.nextDisplayChangeText()?.let { Text(it, color = Z.TextSoft, fontSize = 14.sp) }
             WakeChecklist(vm)

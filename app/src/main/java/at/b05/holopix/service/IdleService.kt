@@ -109,22 +109,21 @@ class IdleService : Service() {
         val idle = System.currentTimeMillis() - Holo.lastActivity
         val need = p.idleMinutes.coerceAtLeast(1) * 60_000L
         fun status(s: String) { Holo.serviceStatus = s }
-        // außerhalb eines Zeitraums (und ohne Besuchermodus): kein Bildschirmschoner,
-        // Display wird nicht wach gehalten → Android schaltet nach seinem Zeitlimit ab
-        if (!Holo.scheduleOn()) {
+        // außerhalb eines Zeitraums (und ohne Besuchermodus): Bildschirmschoner startet trotzdem nach der Leerlaufzeit,
+        // das Display wird aber nicht wach gehalten → Android schaltet nach seinem Zeitlimit ab
+        val inSchedule = Holo.scheduleOn()
+        updateWakeLock(inSchedule && (p.visitorMode || p.keepScreenOn))
+        val outside = if (inSchedule) "" else {
             val ds = at.b05.holopix.display.DisplaySchedule
-            status("Außerhalb des Display-Zeitplans – kein Bildschirmschoner (heute ${ds.todayText(ds.fromJson(p.displayPlan))}). " +
-                "Zeitraum für heute eintragen, Zeitplan ausschalten oder Besuchermodus nutzen.")
-            updateWakeLock(false); return
+            " · außerhalb des Zeitplans (heute ${ds.todayText(ds.fromJson(p.displayPlan))}): Display geht nach dem Android-Zeitlimit aus"
         }
-        updateWakeLock(p.visitorMode || p.keepScreenOn)
         if (!p.enabled && !p.visitorMode) { status("Automatischer Start ist aus"); return }
-        if (Holo.screensaverShowing) { status("Bildschirmschoner läuft"); return }
+        if (Holo.screensaverShowing) { status("Bildschirmschoner läuft$outside"); return }
         if (!Settings.canDrawOverlays(this)) { status("Berechtigung „Über anderen Apps einblenden“ fehlt"); return }
         if (!Holo.photos.ready) { status("Keine Fotoquelle eingerichtet"); return }
         if (!pm.isInteractive) { status("Display ist aus"); return }
         if (idle < need) {
-            status("Start in ${fmt(need - idle)} (ohne Bedienung seit ${fmt(idle)})" + (Holo.lastStartError?.let { " · Letzter Fehler: $it" } ?: ""))
+            status("Start in ${fmt(need - idle)} (ohne Bedienung seit ${fmt(idle)})" + outside + (Holo.lastStartError?.let { " · Letzter Fehler: $it" } ?: ""))
             return
         }
         if (!p.visitorMode && p.skipWhileMedia && getSystemService(AudioManager::class.java).isMusicActive) {
