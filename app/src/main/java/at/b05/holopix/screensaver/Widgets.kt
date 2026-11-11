@@ -22,8 +22,9 @@ fun weatherIcon(code: Int, isDay: Boolean = true): ImageVector = when (code) {
     else -> Icons.Rounded.Cloud
 }
 
-/** Wetter-Zeile: „6 °C · leicht bewölkt · 2° / 9° · Regen 40 %“. */
-fun weatherLine(w: Weather): Pair<ImageVector, String> {
+/** Wetter-Zeile: „6 °C · leicht bewölkt · 2° / 9° · Regen 40 %“ bzw. kompakt nur Symbol + „6 °C“. */
+fun weatherLine(w: Weather, compact: Boolean = false): Pair<ImageVector, String> {
+    if (compact) return weatherIcon(w.code, w.isDay) to "${Math.round(w.temp)} °C"
     val today = w.days.firstOrNull()
     val parts = mutableListOf("${Math.round(w.temp)} °C", w.description)
     if (today != null) {

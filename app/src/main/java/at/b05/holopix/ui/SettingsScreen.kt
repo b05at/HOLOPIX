@@ -458,6 +458,13 @@ private fun WeatherSection(vm: SettingsVm) {
         var on by remember { mutableStateOf(p.ssShowWeather) }
         SwitchRow("Im Bildschirmschoner anzeigen", on) { on = it; p.ssShowWeather = it; if (it) vm.refreshWeather() }
         if (on) {
+            var style by remember { mutableStateOf(p.ssWeatherStyle) }
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(selected = style == "full", onClick = { style = "full"; p.ssWeatherStyle = "full" },
+                    label = { Text("Ausführlich (Zustand, Min/Max, Regen)") })
+                FilterChip(selected = style == "compact", onClick = { style = "compact"; p.ssWeatherStyle = "compact" },
+                    label = { Text("Kompakt (Symbol + aktuelle Temperatur)") })
+            }
             var city by remember { mutableStateOf(p.weatherCity) }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 OutlinedTextField(city, { city = it }, label = { Text("Ort") }, singleLine = true, modifier = Modifier.weight(1f).keepVisibleWhenFocused())
@@ -466,7 +473,7 @@ private fun WeatherSection(vm: SettingsVm) {
             }
             LaunchedEffect(Unit) { if (vm.weather == null) vm.refreshWeather() }
             vm.weather?.let { w ->
-                val (icon, line) = weatherLine(w)
+                val (icon, line) = weatherLine(w, compact = style == "compact")
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(icon, null, tint = Z.Primary)
                     Spacer(Modifier.width(8.dp))
@@ -519,15 +526,15 @@ private fun DisplayScheduleSection(vm: SettingsVm) {
     val ctx = LocalContext.current
     val ds = at.b05.holopix.display.DisplaySchedule
     var pick by remember { mutableStateOf<Triple<Int, Int, Boolean>?>(null) } // (Tag, Zeitraum, true = An-Zeit)
-    var adminActive by remember { mutableStateOf(ds.adminActive(ctx)) }
-    val adminLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { adminActive = ds.adminActive(ctx) }
 
     Section("Display-Zeitplan") {
         SwitchRow("Display automatisch ein- und ausschalten", vm.displayScheduleEnabled) { vm.setDisplaySchedule(it) }
         if (vm.displayScheduleEnabled) {
             Hint("Pro Wochentag einen oder mehrere Zeiträume, in denen das Display an ist (z. B. 06:00–08:30 und 16:00–22:00). " +
-                "Zu Beginn eines Zeitraums weckt HOLOPIX das Display und startet den Bildschirmschoner, am Ende geht es aus. " +
-                "Tag abgehakt = ganztägig an. Außerhalb des Zeitplans startet kein Bildschirmschoner.")
+                "Zu Beginn eines Zeitraums weckt HOLOPIX das Display und startet den Bildschirmschoner. Außerhalb eines Zeitraums " +
+                "startet kein Bildschirmschoner und Android schaltet das Display nach seinem eingestellten Zeitlimit aus " +
+                "(Einstellungen → Display → Bildschirm-Zeitlimit). Ohne Zeitraum bleibt das Display an diesem Tag aus, " +
+                "Tag nicht angehakt = ganztägig an. Der Besuchermodus hebt den Zeitplan auf.")
             vm.displayPlans.forEachIndexed { i, plan ->
                 Column(Modifier.fillMaxWidth().background(Z.Chip, RoundedCornerShape(12.dp)).padding(8.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -544,7 +551,7 @@ private fun DisplayScheduleSection(vm: SettingsVm) {
                         }
                     }
                     if (plan.active) {
-                        if (plan.windows.isEmpty()) Text("Kein Zeitraum – Display ganztägig an", color = Z.TextSoft, fontSize = 13.sp, modifier = Modifier.padding(start = 48.dp))
+                        if (plan.windows.isEmpty()) Text("Kein Zeitraum – Display bleibt aus", color = Z.TextSoft, fontSize = 13.sp, modifier = Modifier.padding(start = 48.dp))
                         plan.windows.forEachIndexed { wi, w ->
                             FlowRow(Modifier.padding(start = 40.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 OutlinedButton(onClick = { pick = Triple(i, wi, true) }) { Text("An ${w.on}") }
@@ -559,21 +566,7 @@ private fun DisplayScheduleSection(vm: SettingsVm) {
                 }
             }
             vm.nextDisplayChangeText()?.let { Text(it, color = Z.TextSoft, fontSize = 14.sp) }
-            var wakeMin by remember { mutableIntStateOf(vm.prefs.displayWakeMinutes) }
-            Stepper("Außerhalb des Zeitplans nach Antippen an für: $wakeMin Min",
-                onMinus = { wakeMin = (if (wakeMin > 5) wakeMin - 5 else wakeMin - 1).coerceAtLeast(1); vm.prefs.displayWakeMinutes = wakeMin },
-                onPlus = { wakeMin = (if (wakeMin >= 5) wakeMin + 5 else wakeMin + 1).coerceAtMost(120); vm.prefs.displayWakeMinutes = wakeMin })
-            WakeChecklist(vm, adminActive)
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                if (adminActive) {
-                    Text("Display wird sofort ausgeschaltet ✓", color = Z.TextSoft, modifier = Modifier.weight(1f))
-                } else {
-                    Text("Ohne Freigabe schaltet Android das Display erst nach seinem eigenen Zeitlimit aus. " +
-                        "Für sofortiges Ausschalten HOLOPIX als Geräteadministrator erlauben (nur Recht „Bildschirm sperren“).",
-                        color = Z.TextSoft, fontSize = 14.sp, modifier = Modifier.weight(1f))
-                    OutlinedButton(onClick = { adminLauncher.launch(ds.adminRequestIntent(ctx)) }) { Text("Erlauben") }
-                }
-            }
+            WakeChecklist(vm)
         }
     }
 
@@ -613,7 +606,7 @@ private fun TimePickDialog(title: String, initial: java.time.LocalTime, onDismis
 
 /** Was Android braucht, damit sich das Display zuverlässig selbst einschaltet. */
 @Composable
-private fun WakeChecklist(vm: SettingsVm, adminActive: Boolean) {
+private fun WakeChecklist(vm: SettingsVm) {
     val ctx = LocalContext.current
     val ds = at.b05.holopix.display.DisplaySchedule
     val back = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { vm.permTick++ }
@@ -638,13 +631,9 @@ private fun WakeChecklist(vm: SettingsVm, adminActive: Boolean) {
         PermRow("Vollbild-Benachrichtigungen (Android 14+)", full) {
             if (android.os.Build.VERSION.SDK_INT >= 34) open(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT)
         }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(if (adminActive) "✓" else "–", color = if (adminActive) Z.Primary else Z.TextSoft, fontWeight = FontWeight.Bold, modifier = Modifier.width(26.dp))
-            Text("Geräteadministrator (sofort ausschalten) – optional", color = Z.Text, fontSize = 15.sp, modifier = Modifier.weight(1f))
-        }
         OutlinedButton(onClick = {
             ds.scheduleTestWake(ctx)
-            if (!ds.lockNow(ctx)) android.widget.Toast.makeText(ctx,
+            android.widget.Toast.makeText(ctx,
                 "Jetzt den Ein-/Aus-Knopf drücken – in 15 Sekunden schaltet HOLOPIX das Display wieder ein.", android.widget.Toast.LENGTH_LONG).show()
         }) { Text("Testen: aus und nach 15 s wieder an") }
     }

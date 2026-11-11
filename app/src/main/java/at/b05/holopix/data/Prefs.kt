@@ -36,8 +36,6 @@ class Prefs(context: Context) {
     // Display-Zeitplan & Sperrbildschirm
     var displayScheduleEnabled by B("disp_sched", false)
     var displayPlan by S("disp_plan")
-    /** Außerhalb des Zeitplans: so lange bleibt das Display nach einer Berührung an (Minuten). */
-    var displayWakeMinutes by I("disp_wake_min", 5)
     /** Besuchermodus: Display und Bildschirmschoner bleiben an, Zeitplan pausiert – bis er wieder ausgeschaltet wird. */
     var visitorMode by B("visitor", false)
     /** Sperrbildschirm überspringen (Wischsperre automatisch wegblenden, Bildschirmschoner über dem Sperrbildschirm). */
@@ -63,6 +61,8 @@ class Prefs(context: Context) {
     var ssShowClock by B("ss_clock", true)
     var ssShowDate by B("ss_date", true)
     var ssShowWeather by B("ss_weather", false)
+    /** Wetter-Widget: "full" = Temperatur, Zustand, Min/Max, Regen; "compact" = nur Symbol + aktuelle Temperatur. */
+    var ssWeatherStyle by S("ss_weather_style", "full")
     var ssOverlayPos by S("ss_pos", "split")   // bl | bc | br | tl | tr | split
     var ssOverlaySize by I("ss_size", 1)       // 0 klein, 1 mittel, 2 groß
     var ssShowCaption by B("ss_caption", true)

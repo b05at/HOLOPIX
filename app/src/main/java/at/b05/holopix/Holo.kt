@@ -92,7 +92,7 @@ object Holo {
 
     fun setVisitor(c: Context, on: Boolean) {
         visitorMode = on; prefs.visitorMode = on
-        onUserActivity() // nach dem Ausschalten noch die Weck-Zeit an, dann greift der Zeitplan
+        onUserActivity()
         IdleService.refresh(c)
     }
 

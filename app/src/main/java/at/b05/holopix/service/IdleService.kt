@@ -104,14 +104,9 @@ class IdleService : Service() {
         if (System.currentTimeMillis() - lastUpdateCheck > 6 * 3600_000L) { lastUpdateCheck = System.currentTimeMillis(); UpdateNotifier.check(this) }
         val pm = getSystemService(PowerManager::class.java)
         val idle = System.currentTimeMillis() - Holo.lastActivity
-        if (!Holo.scheduleOn()) {
-            // außerhalb des Zeitplans: nach Berührung noch die Weck-Zeit an, dann aus
-            if (pm.isInteractive && idle > p.displayWakeMinutes.coerceAtLeast(1) * 60_000L) {
-                Holo.finishScreensaver()
-                at.b05.holopix.display.DisplaySchedule.lockNow(this) // ohne Geräteadministrator: Android-Zeitlimit schaltet ab
-            }
-            return
-        }
+        // außerhalb eines Zeitraums (und ohne Besuchermodus): kein Bildschirmschoner,
+        // Display wird nicht wach gehalten → Android schaltet nach seinem Zeitlimit ab
+        if (!Holo.scheduleOn()) return
         if (!p.enabled && !p.visitorMode) return
         if (Holo.screensaverShowing) return
         if (idle < p.idleMinutes.coerceAtLeast(1) * 60_000L) return

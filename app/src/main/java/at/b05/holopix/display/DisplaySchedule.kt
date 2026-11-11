@@ -2,10 +2,7 @@ package at.b05.holopix.display
 
 import android.app.AlarmManager
 import android.app.PendingIntent
-import android.app.admin.DeviceAdminReceiver
-import android.app.admin.DevicePolicyManager
 import android.content.BroadcastReceiver
-import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.os.Build
@@ -31,7 +28,8 @@ data class OnWindow(val on: LocalTime, val off: LocalTime) {
 
 /**
  * Plan für einen Wochentag: ein oder mehrere Zeiträume, in denen das Display an ist
- * (z. B. 06:00–08:30 und 16:00–22:00). Inaktiver Tag = Display den ganzen Tag an.
+ * (z. B. 06:00–08:30 und 16:00–22:00). Inaktiver Tag = Display den ganzen Tag an,
+ * aktiver Tag ohne Zeitraum = Display bleibt aus.
  */
 data class DayPlan(val active: Boolean, val windows: List<OnWindow>) {
     // Kompatibilität mit älterem Code / Einstellungen mit nur einem Zeitraum
@@ -70,7 +68,8 @@ object DisplaySchedule {
     /** Soll das Display zu diesem Zeitpunkt laut Plan an sein? (Index 0 = Montag) */
     fun isOn(plans: List<DayPlan>, at: LocalDateTime): Boolean {
         val p = plans[at.dayOfWeek.value - 1]
-        if (!p.active || p.windows.isEmpty()) return true
+        if (!p.active) return true          // Tag ohne Zeitplan: ganztägig an
+        if (p.windows.isEmpty()) return false // Zeitplan ohne Zeitraum: Display bleibt aus
         val t = at.toLocalTime()
         return p.windows.any { it.contains(t) }
     }
@@ -195,25 +194,6 @@ object DisplaySchedule {
     }
 
     fun isTest(intent: Intent) = intent.action == ACTION_TEST
-
-    fun adminComponent(context: Context) = ComponentName(context, HolopixAdminReceiver::class.java)
-
-    fun adminActive(context: Context): Boolean =
-        context.getSystemService(DevicePolicyManager::class.java)?.isAdminActive(adminComponent(context)) == true
-
-    /** Display sofort ausschalten – nur möglich, wenn HOLOPIX Geräteadministrator ist. */
-    fun lockNow(context: Context): Boolean {
-        if (!adminActive(context)) return false
-        return try {
-            context.getSystemService(DevicePolicyManager::class.java)?.lockNow(); true
-        } catch (e: SecurityException) {
-            false
-        }
-    }
-
-    fun adminRequestIntent(context: Context): Intent = Intent(DevicePolicyManager.ACTION_ADD_DEVICE_ADMIN)
-        .putExtra(DevicePolicyManager.EXTRA_DEVICE_ADMIN, adminComponent(context))
-        .putExtra(DevicePolicyManager.EXTRA_ADD_EXPLANATION, "Damit HOLOPIX das Display laut Zeitplan sofort ausschalten kann.")
 }
 
 /** Wird zum Umschaltzeitpunkt ausgelöst: weckt das Display (Bildschirmschoner) bzw. schaltet es aus und plant den nächsten Wecker. */
@@ -231,14 +211,10 @@ class DisplayAlarmReceiver : BroadcastReceiver() {
                 Holo.onUserActivity()
                 DisplaySchedule.wakeScreen(context)
                 if (Holo.photos.ready) Holo.startScreensaver(context, wake = true)
-            } else if (!prefs.visitorMode) {
-                Holo.finishScreensaver()
-                DisplaySchedule.lockNow(context)
             }
+            // Ende eines Zeitraums: nichts erzwingen – der Bildschirmschoner gibt das Display frei
+            // und Android schaltet es nach dem eingestellten Zeitlimit aus.
         }
         DisplaySchedule.reschedule(context)
     }
 }
-
-/** Geräteadministrator (nur Recht "Bildschirm sperren"), damit das Display wirklich ausgeht. */
-class HolopixAdminReceiver : DeviceAdminReceiver()

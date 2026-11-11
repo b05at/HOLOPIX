@@ -32,7 +32,7 @@ class ScreensaverActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Holo.init(application)
-        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        if (Holo.scheduleOn()) window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         applyWake(intent)
         WindowCompat.setDecorFitsSystemWindows(window, false)
         WindowCompat.getInsetsController(window, window.decorView).apply {
@@ -42,9 +42,17 @@ class ScreensaverActivity : ComponentActivity() {
         show = SlideShow(lifecycleScope)
         val p = Holo.prefs
         setContent {
-            val now by produceState(LocalDateTime.now()) { while (true) { value = LocalDateTime.now(); delay(1000) } }
+            val now by produceState(LocalDateTime.now()) {
+                while (true) {
+                    value = LocalDateTime.now()
+                    // außerhalb eines Zeitraums: Display freigeben, Android schaltet nach seinem Zeitlimit ab
+                    if (Holo.scheduleOn()) window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                    else window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                    delay(1000)
+                }
+            }
             val info = buildList<Pair<androidx.compose.ui.graphics.vector.ImageVector, String>> {
-                if (p.ssShowWeather) Holo.weather?.let { add(weatherLine(it)) }
+                if (p.ssShowWeather) Holo.weather?.let { add(weatherLine(it, compact = p.ssWeatherStyle == "compact")) }
             }
             ScreensaverView(
                 slide = show.slide,
