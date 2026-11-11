@@ -10,6 +10,8 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import at.b05.holopix.data.SmbSource
 import at.b05.holopix.data.SmbStep
+import at.b05.holopix.display.DayPlan
+import at.b05.holopix.display.DisplaySchedule
 import at.b05.holopix.screensaver.OverlayStyle
 import at.b05.holopix.service.IdleService
 import at.b05.holopix.update.UpdateInfo
@@ -37,7 +39,50 @@ class SettingsVm(app: Application) : AndroidViewModel(app) {
 
     fun setServiceEnabled(on: Boolean) {
         enabled = on; prefs.enabled = on
-        if (on) IdleService.start(ctx) else IdleService.stop(ctx)
+        IdleService.refresh(ctx)
+    }
+
+    // ---------- Besuchermodus ----------
+
+    val visitorMode get() = Holo.visitorMode
+    fun toggleVisitor() {
+        Holo.setVisitor(ctx, !Holo.visitorMode)
+        message = if (Holo.visitorMode) "Besuchermodus an – Display und Bildschirmschoner bleiben an, bis du ihn ausschaltest"
+        else "Besuchermodus aus – Display-Zeitplan gilt wieder"
+    }
+
+    // ---------- Display-Zeitplan ----------
+
+    var displayScheduleEnabled by mutableStateOf(prefs.displayScheduleEnabled)
+        private set
+    var displayPlans by mutableStateOf(DisplaySchedule.fromJson(prefs.displayPlan))
+        private set
+
+    fun setDisplaySchedule(on: Boolean) {
+        displayScheduleEnabled = on; prefs.displayScheduleEnabled = on
+        if (on && prefs.displayPlan.isBlank()) prefs.displayPlan = DisplaySchedule.toJson(displayPlans)
+        DisplaySchedule.reschedule(ctx); IdleService.refresh(ctx)
+    }
+
+    fun setDayPlan(index: Int, plan: DayPlan) {
+        displayPlans = displayPlans.toMutableList().also { it[index] = plan }
+        prefs.displayPlan = DisplaySchedule.toJson(displayPlans)
+        DisplaySchedule.reschedule(ctx)
+    }
+
+    fun copyDayPlanToAll(index: Int) {
+        val src = displayPlans[index]
+        displayPlans = List(7) { src }
+        prefs.displayPlan = DisplaySchedule.toJson(displayPlans)
+        DisplaySchedule.reschedule(ctx)
+    }
+
+    fun nextDisplayChangeText(): String? {
+        if (!displayScheduleEnabled) return null
+        val n = DisplaySchedule.nextChange(displayPlans, java.time.LocalDateTime.now()) ?: return null
+        val on = DisplaySchedule.isOn(displayPlans, n)
+        return "Nächste Änderung: Display ${if (on) "an" else "aus"} am " +
+            n.format(java.time.format.DateTimeFormatter.ofPattern("EEEE, HH:mm", java.util.Locale.GERMAN))
     }
 
     fun serviceSettingsChanged() = IdleService.refresh(ctx)

@@ -33,6 +33,16 @@ class Prefs(context: Context) {
     /** Nur starten, während das Gerät lädt. */
     var onlyWhileCharging by B("only_charging", false)
 
+    // Display-Zeitplan & Sperrbildschirm
+    var displayScheduleEnabled by B("disp_sched", false)
+    var displayPlan by S("disp_plan")
+    /** Außerhalb des Zeitplans: so lange bleibt das Display nach einer Berührung an (Minuten). */
+    var displayWakeMinutes by I("disp_wake_min", 5)
+    /** Besuchermodus: Display und Bildschirmschoner bleiben an, Zeitplan pausiert – bis er wieder ausgeschaltet wird. */
+    var visitorMode by B("visitor", false)
+    /** Sperrbildschirm überspringen (Wischsperre automatisch wegblenden, Bildschirmschoner über dem Sperrbildschirm). */
+    var skipKeyguard by B("skip_keyguard", true)
+
     // SMB
     var smbHost by S("smb_host")
     var smbShare by S("smb_share")

@@ -33,6 +33,7 @@ class ScreensaverActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         Holo.init(application)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        applyWake(intent)
         WindowCompat.setDecorFitsSystemWindows(window, false)
         WindowCompat.getInsetsController(window, window.decorView).apply {
             systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
@@ -57,9 +58,21 @@ class ScreensaverActivity : ComponentActivity() {
         }
     }
 
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        applyWake(intent)
+    }
+
+    /** Vom Zeitplan gestartet: Display einschalten (über dem Sperrbildschirm). */
+    private fun applyWake(i: android.content.Intent?) {
+        if (i?.getBooleanExtra(EXTRA_WAKE, false) == true) setTurnScreenOn(true)
+        at.b05.holopix.display.DisplaySchedule.cancelWakeNotification(this)
+    }
+
     override fun onStart() {
         super.onStart()
         Holo.screensaverShowing = true
+        Holo.screensaverFinisher = { runOnUiThread { if (!isFinishing) finish() } }
         val dm = resources.displayMetrics
         show.screenAspect = dm.widthPixels.toFloat() / dm.heightPixels.coerceAtLeast(1)
         show.maxEdge = maxOf(dm.widthPixels, dm.heightPixels).coerceIn(800, 2560)
@@ -83,9 +96,14 @@ class ScreensaverActivity : ComponentActivity() {
         widgetJob?.cancel()
         show.stop()
         Holo.screensaverShowing = false
+        Holo.screensaverFinisher = null
         Holo.onUserActivity()
         // nicht im Hintergrund liegen lassen – beim nächsten Leerlauf neu starten
         if (!isChangingConfigurations) finish()
+    }
+
+    companion object {
+        const val EXTRA_WAKE = "wake"
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
@@ -94,6 +112,11 @@ class ScreensaverActivity : ComponentActivity() {
 
     private fun finishScreensaver() {
         Holo.onUserActivity()
+        // Sperrbildschirm überspringen: Wischsperre beim Beenden wegblenden
+        if (Holo.prefs.skipKeyguard) {
+            val km = getSystemService(android.app.KeyguardManager::class.java)
+            if (km != null && km.isKeyguardLocked && !km.isKeyguardSecure) try { km.requestDismissKeyguard(this, null) } catch (e: Exception) { }
+        }
         finish()
         @Suppress("DEPRECATION")
         overridePendingTransition(0, android.R.anim.fade_out)

@@ -20,7 +20,8 @@ class HolopixApplication : Application() {
         super.onCreate()
         CrashLog.install(this)
         Holo.init(this)
-        if (Holo.prefs.enabled) IdleService.start(this)
+        if (Holo.serviceNeeded()) IdleService.start(this)
+        at.b05.holopix.display.DisplaySchedule.reschedule(this)
     }
 }
 
@@ -48,6 +49,7 @@ object Holo {
         smb = SmbSource(a, prefs)
         photos = MultiPhotoSource(smb, LocalPhotoSource(a, prefs, smb), prefs)
         collage = CollageEngine(photos)
+        visitorMode = prefs.visitorMode
     }
 
     /** Letzte Bedienung (Berührung irgendwo, Bildschirm eingeschaltet, Bildschirmschoner beendet). */
@@ -70,7 +72,35 @@ object Holo {
         } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { }
     }
 
-    fun startScreensaver(c: Context) {
-        c.startActivity(Intent(c, ScreensaverActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_ANIMATION))
+    fun startScreensaver(c: Context, wake: Boolean = false) {
+        try {
+            c.startActivity(
+                Intent(c, ScreensaverActivity::class.java).putExtra(ScreensaverActivity.EXTRA_WAKE, wake)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_ANIMATION)
+            )
+        } catch (e: Exception) { }
     }
+
+    /** Vom sichtbaren Bildschirmschoner gesetzt, damit Zeitplan/Dienst ihn beenden können. */
+    @Volatile var screensaverFinisher: (() -> Unit)? = null
+    fun finishScreensaver() { screensaverFinisher?.invoke() }
+
+    // ---------- Besuchermodus & Zeitplan ----------
+
+    var visitorMode by mutableStateOf(false)
+        private set
+
+    fun setVisitor(c: Context, on: Boolean) {
+        visitorMode = on; prefs.visitorMode = on
+        onUserActivity() // nach dem Ausschalten noch die Weck-Zeit an, dann greift der Zeitplan
+        IdleService.refresh(c)
+    }
+
+    /** Hintergrunddienst nötig: automatischer Bildschirmschoner, Zeitplan oder Besuchermodus. */
+    fun serviceNeeded(): Boolean = prefs.enabled || prefs.displayScheduleEnabled || prefs.visitorMode
+
+    /** Laut Zeitplan (oder Besuchermodus) soll das Display jetzt an sein. */
+    fun scheduleOn(): Boolean = prefs.visitorMode || !prefs.displayScheduleEnabled ||
+        at.b05.holopix.display.DisplaySchedule.isOn(
+            at.b05.holopix.display.DisplaySchedule.fromJson(prefs.displayPlan), java.time.LocalDateTime.now())
 }

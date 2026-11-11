@@ -46,7 +46,20 @@ class IdleService : Service() {
         override fun onReceive(c: Context, i: Intent) {
             // Bildschirm an / entsperrt zählt als Bedienung
             Holo.onUserActivity()
+            if (i.action == Intent.ACTION_SCREEN_ON) skipKeyguard()
         }
+    }
+
+    /** Wischsperre (ohne PIN/Muster) automatisch wegblenden – über eine kurz sichtbare, unsichtbare Activity. */
+    private fun skipKeyguard() {
+        if (!Holo.prefs.skipKeyguard || Holo.screensaverShowing) return
+        val km = getSystemService(android.app.KeyguardManager::class.java) ?: return
+        if (!km.isKeyguardLocked || km.isKeyguardSecure) return
+        if (!Settings.canDrawOverlays(this)) return
+        try {
+            startActivity(Intent(this, at.b05.holopix.KeyguardActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_ANIMATION or Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS))
+        } catch (e: Exception) { }
     }
 
     private val tick = object : Runnable {
@@ -70,7 +83,8 @@ class IdleService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (!Holo.prefs.enabled) { stopSelf(); return START_NOT_STICKY }
+        if (intent?.action == ACTION_VISITOR) Holo.setVisitor(this, !Holo.prefs.visitorMode)
+        if (!Holo.serviceNeeded()) { stopSelf(); return START_NOT_STICKY }
         goForeground()
         updateOverlay()
         return START_STICKY
@@ -85,16 +99,25 @@ class IdleService : Service() {
 
     private fun check() {
         val p = Holo.prefs
-        if (!p.enabled) { stopSelf(); return }
+        if (!Holo.serviceNeeded()) { stopSelf(); return }
         updateOverlay()
         if (System.currentTimeMillis() - lastUpdateCheck > 6 * 3600_000L) { lastUpdateCheck = System.currentTimeMillis(); UpdateNotifier.check(this) }
-        if (Holo.screensaverShowing) return
-        val idle = System.currentTimeMillis() - Holo.lastActivity
-        if (idle < p.idleMinutes.coerceAtLeast(1) * 60_000L) return
         val pm = getSystemService(PowerManager::class.java)
+        val idle = System.currentTimeMillis() - Holo.lastActivity
+        if (!Holo.scheduleOn()) {
+            // außerhalb des Zeitplans: nach Berührung noch die Weck-Zeit an, dann aus
+            if (pm.isInteractive && idle > p.displayWakeMinutes.coerceAtLeast(1) * 60_000L) {
+                Holo.finishScreensaver()
+                at.b05.holopix.display.DisplaySchedule.lockNow(this) // ohne Geräteadministrator: Android-Zeitlimit schaltet ab
+            }
+            return
+        }
+        if (!p.enabled && !p.visitorMode) return
+        if (Holo.screensaverShowing) return
+        if (idle < p.idleMinutes.coerceAtLeast(1) * 60_000L) return
         if (!pm.isInteractive) return
-        if (p.skipWhileMedia && getSystemService(AudioManager::class.java).isMusicActive) return
-        if (p.onlyWhileCharging && !isCharging()) return
+        if (!p.visitorMode && p.skipWhileMedia && getSystemService(AudioManager::class.java).isMusicActive) return
+        if (!p.visitorMode && p.onlyWhileCharging && !isCharging()) return
         if (!Holo.photos.ready) return
         if (!Settings.canDrawOverlays(this)) return // ohne diese Berechtigung darf Android die Activity nicht aus dem Hintergrund starten
         Holo.onUserActivity() // nicht sofort erneut auslösen, falls der Start scheitert
@@ -111,7 +134,8 @@ class IdleService : Service() {
     @SuppressLint("ClickableViewAccessibility")
     private fun updateOverlay() {
         if (!Settings.canDrawOverlays(this)) { removeOverlay(); return }
-        val keepOn = Holo.prefs.keepScreenOn
+        // Display an lassen: Besuchermodus immer, sonst nur innerhalb des Zeitplans
+        val keepOn = Holo.prefs.visitorMode || (Holo.prefs.keepScreenOn && Holo.scheduleOn())
         if (overlay != null && overlayKeepOn == keepOn) return
         removeOverlay()
         val wm = getSystemService(WindowManager::class.java)
@@ -148,12 +172,20 @@ class IdleService : Service() {
         val open = PendingIntent.getActivity(this, 1, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE)
         val now = PendingIntent.getActivity(this, 2, Intent(this, at.b05.holopix.ScreensaverActivity::class.java)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), PendingIntent.FLAG_IMMUTABLE)
+        val visitor = PendingIntent.getService(this, 3, Intent(this, IdleService::class.java).setAction(ACTION_VISITOR), PendingIntent.FLAG_IMMUTABLE)
+        val p = Holo.prefs
+        val text = when {
+            p.visitorMode -> "Besuchermodus an – Display bleibt an"
+            p.enabled -> "Bildschirmschoner nach ${p.idleMinutes} Min ohne Bedienung"
+            else -> "Display-Zeitplan aktiv"
+        }
         val n: Notification = NotificationCompat.Builder(this, CHANNEL)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle("HOLOPIX aktiv")
-            .setContentText("Bildschirmschoner nach ${Holo.prefs.idleMinutes} Min ohne Bedienung")
+            .setContentText(text)
             .setContentIntent(open)
             .addAction(0, "Jetzt starten", now)
+            .addAction(0, if (p.visitorMode) "Besuchermodus aus" else "Besuchermodus an", visitor)
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_MIN)
             .build()
@@ -165,6 +197,7 @@ class IdleService : Service() {
 
     companion object {
         private const val CHANNEL = "holopix_service"
+        const val ACTION_VISITOR = "at.b05.holopix.VISITOR"
 
         fun start(c: Context) {
             try { c.startForegroundService(Intent(c, IdleService::class.java)) } catch (e: Exception) { }
@@ -173,13 +206,14 @@ class IdleService : Service() {
         fun stop(c: Context) { c.stopService(Intent(c, IdleService::class.java)) }
 
         /** Einstellungen geändert (Zeit, Display an lassen …). */
-        fun refresh(c: Context) { if (Holo.prefs.enabled) start(c) }
+        fun refresh(c: Context) { if (Holo.serviceNeeded()) start(c) else stop(c) }
     }
 }
 
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(c: Context, i: Intent) {
         Holo.init(c.applicationContext as android.app.Application)
-        if (Holo.prefs.enabled) IdleService.start(c)
+        if (Holo.serviceNeeded()) IdleService.start(c)
+        at.b05.holopix.display.DisplaySchedule.reschedule(c)
     }
 }

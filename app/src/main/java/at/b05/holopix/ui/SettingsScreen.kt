@@ -9,6 +9,10 @@ import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.ui.draw.clip
+import androidx.compose.material3.Checkbox
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Celebration
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -125,6 +129,8 @@ fun SettingsScreen(vm: SettingsVm) {
                 Header(vm)
                 vm.lastCrash?.let { CrashSection(vm, it) }
                 ServiceSection(vm)
+                VisitorSection(vm)
+                DisplayScheduleSection(vm)
                 LocalFolderSection(vm)
                 SmbSection(vm)
                 Section("Ablauf") {
@@ -174,6 +180,15 @@ private fun Header(vm: SettingsVm) {
             Text("HOLOPIX", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = Z.Text)
             Text("Foto-Collage als Bildschirmschoner", fontSize = 14.sp, color = Z.TextSoft)
         }
+        // Besuchermodus: nur ein Symbol, farbig hinterlegt wenn aktiv
+        IconButton(
+            onClick = { vm.toggleVisitor() },
+            modifier = Modifier.clip(CircleShape).background(if (vm.visitorMode) Z.Primary else Color.Transparent),
+        ) {
+            Icon(Icons.Rounded.Celebration, if (vm.visitorMode) "Besuchermodus an – zum Ausschalten tippen" else "Besuchermodus einschalten",
+                tint = if (vm.visitorMode) Z.OnPrimary else Z.TextSoft)
+        }
+        Spacer(Modifier.width(8.dp))
         Button(onClick = { vm.startNow() }) { Text("Jetzt starten") }
     }
 }
@@ -207,7 +222,26 @@ private fun ServiceSection(vm: SettingsVm) {
                 "„Display nicht automatisch ausschalten“ einschalten oder die Bildschirm-Zeitüberschreitung in den Android-Einstellungen verlängern.",
                 color = Z.Warn, fontSize = 14.sp)
         }
+        var skipLock by remember { mutableStateOf(p.skipKeyguard) }
+        SwitchRow("Sperrbildschirm überspringen", skipLock) { skipLock = it; p.skipKeyguard = it }
+        Hint("Der Bildschirmschoner erscheint über dem Sperrbildschirm; eine Wischsperre (ohne PIN/Muster) wird beim Einschalten und beim Beenden " +
+            "automatisch weggeblendet. Mit PIN/Muster lässt Android das aus Sicherheitsgründen nicht zu.")
         Permissions(vm)
+    }
+}
+
+@Composable
+private fun VisitorSection(vm: SettingsVm) {
+    Section("Besuchermodus") {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                if (vm.visitorMode) "An – Display und Bildschirmschoner bleiben an, der Zeitplan ist pausiert."
+                else "Aus – Display und Bildschirmschoner unbegrenzt an lassen, bis du ihn wieder ausschaltest. Danach greift wieder der Zeitplan.",
+                Modifier.weight(1f), color = Z.Text, fontSize = 15.sp,
+            )
+            Switch(vm.visitorMode, { vm.toggleVisitor() })
+        }
+        Hint("Auch über das Konfetti-Symbol oben oder die Benachrichtigung „HOLOPIX aktiv“ schaltbar.")
     }
 }
 
@@ -473,5 +507,145 @@ private fun CrashSection(vm: SettingsVm, crash: String) {
             OutlinedButton(onClick = { clip.setText(AnnotatedString(crash)) }) { Text("Kopieren") }
             TextButton(onClick = { vm.clearCrash() }) { Text("Ausblenden") }
         }
+    }
+}
+
+// ---------------- Display-Zeitplan ----------------
+
+private val WEEKDAYS = listOf("Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag")
+
+@Composable
+private fun DisplayScheduleSection(vm: SettingsVm) {
+    val ctx = LocalContext.current
+    val ds = at.b05.holopix.display.DisplaySchedule
+    var pick by remember { mutableStateOf<Triple<Int, Int, Boolean>?>(null) } // (Tag, Zeitraum, true = An-Zeit)
+    var adminActive by remember { mutableStateOf(ds.adminActive(ctx)) }
+    val adminLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { adminActive = ds.adminActive(ctx) }
+
+    Section("Display-Zeitplan") {
+        SwitchRow("Display automatisch ein- und ausschalten", vm.displayScheduleEnabled) { vm.setDisplaySchedule(it) }
+        if (vm.displayScheduleEnabled) {
+            Hint("Pro Wochentag einen oder mehrere Zeiträume, in denen das Display an ist (z. B. 06:00–08:30 und 16:00–22:00). " +
+                "Zu Beginn eines Zeitraums weckt HOLOPIX das Display und startet den Bildschirmschoner, am Ende geht es aus. " +
+                "Tag abgehakt = ganztägig an. Außerhalb des Zeitplans startet kein Bildschirmschoner.")
+            vm.displayPlans.forEachIndexed { i, plan ->
+                Column(Modifier.fillMaxWidth().background(Z.Chip, RoundedCornerShape(12.dp)).padding(8.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(checked = plan.active, onCheckedChange = { vm.setDayPlan(i, plan.copy(active = it)) })
+                        Text(WEEKDAYS[i], color = Z.Text, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
+                        if (!plan.active) Text("ganztägig an", color = Z.TextSoft)
+                        else {
+                            TextButton(onClick = {
+                                val last = plan.windows.lastOrNull()
+                                val start = last?.off?.plusHours(1) ?: java.time.LocalTime.of(16, 0)
+                                vm.setDayPlan(i, plan.copy(windows = plan.windows + at.b05.holopix.display.OnWindow(start, start.plusHours(2))))
+                            }) { Text("+ Zeitraum") }
+                            if (i == 0) TextButton(onClick = { vm.copyDayPlanToAll(0) }) { Text("Für alle Tage") }
+                        }
+                    }
+                    if (plan.active) {
+                        if (plan.windows.isEmpty()) Text("Kein Zeitraum – Display ganztägig an", color = Z.TextSoft, fontSize = 13.sp, modifier = Modifier.padding(start = 48.dp))
+                        plan.windows.forEachIndexed { wi, w ->
+                            FlowRow(Modifier.padding(start = 40.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                OutlinedButton(onClick = { pick = Triple(i, wi, true) }) { Text("An ${w.on}") }
+                                Text("–", color = Z.TextSoft, modifier = Modifier.align(Alignment.CenterVertically))
+                                OutlinedButton(onClick = { pick = Triple(i, wi, false) }) { Text("Aus ${w.off}") }
+                                IconButton(onClick = { vm.setDayPlan(i, plan.copy(windows = plan.windows.filterIndexed { k, _ -> k != wi })) }) {
+                                    Icon(Icons.Rounded.Close, "Zeitraum entfernen", tint = Z.TextSoft)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            vm.nextDisplayChangeText()?.let { Text(it, color = Z.TextSoft, fontSize = 14.sp) }
+            var wakeMin by remember { mutableIntStateOf(vm.prefs.displayWakeMinutes) }
+            Stepper("Außerhalb des Zeitplans nach Antippen an für: $wakeMin Min",
+                onMinus = { wakeMin = (if (wakeMin > 5) wakeMin - 5 else wakeMin - 1).coerceAtLeast(1); vm.prefs.displayWakeMinutes = wakeMin },
+                onPlus = { wakeMin = (if (wakeMin >= 5) wakeMin + 5 else wakeMin + 1).coerceAtMost(120); vm.prefs.displayWakeMinutes = wakeMin })
+            WakeChecklist(vm, adminActive)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                if (adminActive) {
+                    Text("Display wird sofort ausgeschaltet ✓", color = Z.TextSoft, modifier = Modifier.weight(1f))
+                } else {
+                    Text("Ohne Freigabe schaltet Android das Display erst nach seinem eigenen Zeitlimit aus. " +
+                        "Für sofortiges Ausschalten HOLOPIX als Geräteadministrator erlauben (nur Recht „Bildschirm sperren“).",
+                        color = Z.TextSoft, fontSize = 14.sp, modifier = Modifier.weight(1f))
+                    OutlinedButton(onClick = { adminLauncher.launch(ds.adminRequestIntent(ctx)) }) { Text("Erlauben") }
+                }
+            }
+        }
+    }
+
+    pick?.let { (day, wi, isOn) ->
+        val plan = vm.displayPlans[day]
+        val w = plan.windows.getOrNull(wi)
+        if (w == null) { pick = null } else TimePickDialog(
+            title = "${WEEKDAYS[day]}: Display ${if (isOn) "an" else "aus"}",
+            initial = if (isOn) w.on else w.off,
+            onDismiss = { pick = null },
+        ) { t ->
+            val nw = if (isOn) w.copy(on = t) else w.copy(off = t)
+            vm.setDayPlan(day, plan.copy(windows = plan.windows.mapIndexed { k, x -> if (k == wi) nw else x }.sortedBy { it.on })); pick = null
+        }
+    }
+}
+
+/** Uhrzeit-Auswahl (24 h) als Dialog. */
+@Composable
+private fun TimePickDialog(title: String, initial: java.time.LocalTime, onDismiss: () -> Unit, onPick: (java.time.LocalTime) -> Unit) {
+    val state = androidx.compose.material3.rememberTimePickerState(initialHour = initial.hour, initialMinute = initial.minute, is24Hour = true)
+    val cfg = LocalConfiguration.current
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            androidx.compose.material3.TimePicker(
+                state,
+                layoutType = if (cfg.screenWidthDp > cfg.screenHeightDp) androidx.compose.material3.TimePickerLayoutType.Horizontal
+                else androidx.compose.material3.TimePickerLayoutType.Vertical,
+            )
+        },
+        confirmButton = { TextButton(onClick = { onPick(java.time.LocalTime.of(state.hour, state.minute)) }) { Text("OK") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Abbrechen") } },
+    )
+}
+
+/** Was Android braucht, damit sich das Display zuverlässig selbst einschaltet. */
+@Composable
+private fun WakeChecklist(vm: SettingsVm, adminActive: Boolean) {
+    val ctx = LocalContext.current
+    val ds = at.b05.holopix.display.DisplaySchedule
+    val back = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { vm.permTick++ }
+    fun open(action: String) {
+        try { back.launch(Intent(action, Uri.parse("package:" + ctx.packageName))) } catch (e: Exception) {
+            back.launch(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + ctx.packageName)))
+        }
+    }
+    val tick = vm.permTick
+    val exact = remember(tick) { ds.exactAlarmsAllowed(ctx) }
+    val notif = remember(tick) { ds.notificationsAllowed(ctx) }
+    val full = remember(tick) { ds.fullScreenAllowed(ctx) }
+    Column(
+        Modifier.fillMaxWidth().background(Z.Chip, RoundedCornerShape(12.dp)).padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Text("Damit sich das Display selbst einschaltet", color = Z.Text, fontWeight = FontWeight.Medium)
+        PermRow("Exakte Wecker (pünktliches Ein-/Ausschalten)", exact) {
+            if (android.os.Build.VERSION.SDK_INT >= 31) open(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM)
+        }
+        PermRow("Benachrichtigungen (zum Einschalten nötig)", notif) { open(Settings.ACTION_APPLICATION_DETAILS_SETTINGS) }
+        PermRow("Vollbild-Benachrichtigungen (Android 14+)", full) {
+            if (android.os.Build.VERSION.SDK_INT >= 34) open(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT)
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(if (adminActive) "✓" else "–", color = if (adminActive) Z.Primary else Z.TextSoft, fontWeight = FontWeight.Bold, modifier = Modifier.width(26.dp))
+            Text("Geräteadministrator (sofort ausschalten) – optional", color = Z.Text, fontSize = 15.sp, modifier = Modifier.weight(1f))
+        }
+        OutlinedButton(onClick = {
+            ds.scheduleTestWake(ctx)
+            if (!ds.lockNow(ctx)) android.widget.Toast.makeText(ctx,
+                "Jetzt den Ein-/Aus-Knopf drücken – in 15 Sekunden schaltet HOLOPIX das Display wieder ein.", android.widget.Toast.LENGTH_LONG).show()
+        }) { Text("Testen: aus und nach 15 s wieder an") }
     }
 }
