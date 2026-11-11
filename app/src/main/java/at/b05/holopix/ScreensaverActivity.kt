@@ -14,6 +14,7 @@ import androidx.lifecycle.lifecycleScope
 import at.b05.holopix.screensaver.OverlayStyle
 import at.b05.holopix.screensaver.ScreensaverView
 import at.b05.holopix.screensaver.SlideShow
+import at.b05.holopix.screensaver.ScreensaverContent
 import at.b05.holopix.screensaver.weatherLine
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -40,29 +41,12 @@ class ScreensaverActivity : ComponentActivity() {
             hide(WindowInsetsCompat.Type.systemBars())
         }
         show = SlideShow(lifecycleScope)
-        val p = Holo.prefs
         setContent {
-            val now by produceState(LocalDateTime.now()) {
-                while (true) {
-                    value = LocalDateTime.now()
-                    // außerhalb eines Zeitraums: Display freigeben, Android schaltet nach seinem Zeitlimit ab
-                    if (Holo.scheduleOn()) window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-                    else window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-                    delay(1000)
-                }
-            }
-            val info = buildList<Pair<androidx.compose.ui.graphics.vector.ImageVector, String>> {
-                if (p.ssShowWeather) Holo.weather?.let { add(weatherLine(it, compact = p.ssWeatherStyle == "compact")) }
-            }
-            ScreensaverView(
-                slide = show.slide,
-                clock = if (p.ssShowClock) now.format(DateTimeFormatter.ofPattern("HH:mm")) else null,
-                date = if (p.ssShowDate) now.format(DateTimeFormatter.ofPattern("EEEE, d. MMMM", Locale.GERMAN)) else null,
-                info = info,
-                status = show.status,
-                style = OverlayStyle(p.ssOverlayPos, p.ssOverlaySize, p.ssShowCaption, p.ssPixelShift),
-                onDismiss = { finishScreensaver() },
-            )
+            ScreensaverContent(show, onTick = {
+                // außerhalb eines Zeitraums: Display freigeben, Android schaltet nach seinem Zeitlimit ab
+                if (Holo.scheduleOn()) window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                else window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            }, onDismiss = { finishScreensaver() })
         }
     }
 

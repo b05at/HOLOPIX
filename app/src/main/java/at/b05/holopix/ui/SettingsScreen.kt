@@ -201,6 +201,9 @@ private fun ServiceSection(vm: SettingsVm) {
     val ctx = LocalContext.current
     Section("Automatisch starten") {
         SwitchRow("HOLOPIX im Hintergrund aktiv", vm.enabled) { vm.setServiceEnabled(it) }
+        at.b05.holopix.Holo.serviceStatus?.let { st ->
+            Text("Status: $st", color = Z.Primary, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+        }
         var minutes by remember { mutableIntStateOf(p.idleMinutes) }
         Stepper("Start nach $minutes Min ohne Bedienung",
             onMinus = { minutes = (minutes - 1).coerceAtLeast(1); p.idleMinutes = minutes; vm.serviceSettingsChanged() },

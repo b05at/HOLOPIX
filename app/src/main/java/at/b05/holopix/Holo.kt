@@ -56,6 +56,11 @@ object Holo {
     @Volatile var lastActivity = System.currentTimeMillis()
     fun onUserActivity() { lastActivity = System.currentTimeMillis() }
 
+    /** Was der Hintergrunddienst gerade macht / worauf er wartet (Anzeige in den Einstellungen). */
+    var serviceStatus by mutableStateOf<String?>(null)
+    /** Letzter Fehler beim Starten des Bildschirmschoners. */
+    @Volatile var lastStartError: String? = null
+
     /** Bildschirmschoner ist gerade sichtbar. */
     @Volatile var screensaverShowing = false
 

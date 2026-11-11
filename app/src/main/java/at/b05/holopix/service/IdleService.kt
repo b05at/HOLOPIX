@@ -94,6 +94,9 @@ class IdleService : Service() {
         handler.removeCallbacksAndMessages(null)
         try { unregisterReceiver(screenReceiver) } catch (e: Exception) { }
         removeOverlay()
+        overlayShow.hide()
+        updateWakeLock(false)
+        Holo.serviceStatus = null
         super.onDestroy()
     }
 
@@ -104,19 +107,46 @@ class IdleService : Service() {
         if (System.currentTimeMillis() - lastUpdateCheck > 6 * 3600_000L) { lastUpdateCheck = System.currentTimeMillis(); UpdateNotifier.check(this) }
         val pm = getSystemService(PowerManager::class.java)
         val idle = System.currentTimeMillis() - Holo.lastActivity
+        val need = p.idleMinutes.coerceAtLeast(1) * 60_000L
+        fun status(s: String) { Holo.serviceStatus = s }
         // außerhalb eines Zeitraums (und ohne Besuchermodus): kein Bildschirmschoner,
         // Display wird nicht wach gehalten → Android schaltet nach seinem Zeitlimit ab
-        if (!Holo.scheduleOn()) return
-        if (!p.enabled && !p.visitorMode) return
-        if (Holo.screensaverShowing) return
-        if (idle < p.idleMinutes.coerceAtLeast(1) * 60_000L) return
-        if (!pm.isInteractive) return
-        if (!p.visitorMode && p.skipWhileMedia && getSystemService(AudioManager::class.java).isMusicActive) return
-        if (!p.visitorMode && p.onlyWhileCharging && !isCharging()) return
-        if (!Holo.photos.ready) return
-        if (!Settings.canDrawOverlays(this)) return // ohne diese Berechtigung darf Android die Activity nicht aus dem Hintergrund starten
+        if (!Holo.scheduleOn()) { status("Außerhalb des Display-Zeitplans – kein Bildschirmschoner"); updateWakeLock(false); return }
+        updateWakeLock(p.visitorMode || p.keepScreenOn)
+        if (!p.enabled && !p.visitorMode) { status("Automatischer Start ist aus"); return }
+        if (Holo.screensaverShowing) { status("Bildschirmschoner läuft"); return }
+        if (!Settings.canDrawOverlays(this)) { status("Berechtigung „Über anderen Apps einblenden“ fehlt"); return }
+        if (!Holo.photos.ready) { status("Keine Fotoquelle eingerichtet"); return }
+        if (!pm.isInteractive) { status("Display ist aus"); return }
+        if (idle < need) {
+            status("Start in ${fmt(need - idle)} (ohne Bedienung seit ${fmt(idle)})" + (Holo.lastStartError?.let { " · Letzter Fehler: $it" } ?: ""))
+            return
+        }
+        if (!p.visitorMode && p.skipWhileMedia && getSystemService(AudioManager::class.java).isMusicActive) {
+            status("Wartet: es wird gerade Musik/Ton abgespielt (Option „Nicht starten, während Musik/Video läuft“)"); return
+        }
+        if (!p.visitorMode && p.onlyWhileCharging && !isCharging()) { status("Wartet: Gerät lädt nicht (Option „Nur beim Laden“)"); return }
         Holo.onUserActivity() // nicht sofort erneut auslösen, falls der Start scheitert
-        Holo.startScreensaver(this)
+        // Vollbild-Overlay: kann Android nicht als Hintergrundstart blockieren; Rückfall: Activity
+        if (!overlayShow.show()) Holo.startScreensaver(this)
+    }
+
+    private val overlayShow by lazy { at.b05.holopix.screensaver.ScreensaverOverlay(this) }
+
+    private fun fmt(ms: Long): String { val s = ms / 1000; return "%d:%02d".format(s / 60, s % 60) }
+
+    // Display wach halten (zusätzlich zum Overlay-Flag – das ignorieren manche Geräte bei unsichtbaren Fenstern)
+    private var wakeLock: PowerManager.WakeLock? = null
+    @Suppress("DEPRECATION")
+    private fun updateWakeLock(on: Boolean) {
+        if (on && wakeLock == null) {
+            wakeLock = try {
+                getSystemService(PowerManager::class.java).newWakeLock(PowerManager.SCREEN_BRIGHT_WAKE_LOCK, "holopix:keep-on").apply { setReferenceCounted(false); acquire() }
+            } catch (e: Exception) { null }
+        } else if (!on && wakeLock != null) {
+            try { wakeLock?.release() } catch (e: Exception) { }
+            wakeLock = null
+        }
     }
 
     private fun isCharging(): Boolean {
