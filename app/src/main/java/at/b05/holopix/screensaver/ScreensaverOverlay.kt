@@ -66,9 +66,7 @@ class ScreensaverOverlay(private val context: Context) {
         val wm = context.getSystemService(WindowManager::class.java) ?: return false
         val sc = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
         val slides = SlideShow(sc)
-        val dm = context.resources.displayMetrics
-        slides.screenAspect = dm.widthPixels.toFloat() / dm.heightPixels.coerceAtLeast(1)
-        slides.maxEdge = maxOf(dm.widthPixels, dm.heightPixels).coerceIn(800, 2560)
+        slides.screen = { ScreenProfile.of(context) }
         val o = Owner()
         val v = ComposeView(context)
         v.setViewTreeLifecycleOwner(o)

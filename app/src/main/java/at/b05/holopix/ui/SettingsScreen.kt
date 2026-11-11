@@ -138,8 +138,12 @@ fun SettingsScreen(vm: SettingsVm) {
                     Stepper("Bildwechsel alle $seconds s",
                         onMinus = { seconds = (seconds - 5).coerceAtLeast(5); p.collageSeconds = seconds },
                         onPlus = { seconds += 5; p.collageSeconds = seconds })
-                    Hint("Collagen: bis zu 5 Fotos aus demselben Ordner, passend zum Bildschirmformat; Serienbilder werden nicht nebeneinander gezeigt, " +
-                        "Gesichter bleiben beim Zuschneiden im Bild. Passt kein Foto, wird es ganz mit unscharfem Hintergrund gezeigt.")
+                    val ctx = LocalContext.current
+                    val scr = remember { at.b05.holopix.screensaver.ScreenProfile.of(ctx) }
+                    Hint("Smarte Collage passend zu diesem Bildschirm (${scr.widthPx}×${scr.heightPx} px, ${scr.widthDp.toInt()}×${scr.heightDp.toInt()} dp): " +
+                        "bis zu ${scr.maxPhotos} Fotos aus demselben Ordner, keine Kachel kleiner als ${scr.minTileDp.toInt()} dp, möglichst wenig Beschnitt, " +
+                        "ausgewogene Größen und jedes Mal eine andere Anordnung. Beim Drehen wird sofort neu angeordnet. Serienbilder kommen nicht " +
+                        "nebeneinander, Gesichter bleiben beim Zuschneiden im Bild. Passt kein Foto, wird es ganz mit unscharfem Hintergrund gezeigt.")
                 }
                 OverlaySection(vm)
                 WeatherSection(vm)

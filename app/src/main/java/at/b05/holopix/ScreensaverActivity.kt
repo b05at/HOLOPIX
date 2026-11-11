@@ -65,9 +65,7 @@ class ScreensaverActivity : ComponentActivity() {
         super.onStart()
         Holo.screensaverShowing = true
         Holo.screensaverFinisher = { runOnUiThread { if (!isFinishing) finish() } }
-        val dm = resources.displayMetrics
-        show.screenAspect = dm.widthPixels.toFloat() / dm.heightPixels.coerceAtLeast(1)
-        show.maxEdge = maxOf(dm.widthPixels, dm.heightPixels).coerceIn(800, 2560)
+        show.screen = { at.b05.holopix.screensaver.ScreenProfile.of(this) }
         show.start()
         widgetJob = lifecycleScope.launch {
             while (isActive) {
@@ -75,12 +73,6 @@ class ScreensaverActivity : ComponentActivity() {
                 delay(60_000)
             }
         }
-    }
-
-    override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
-        super.onConfigurationChanged(newConfig)
-        val dm = resources.displayMetrics
-        show.screenAspect = dm.widthPixels.toFloat() / dm.heightPixels.coerceAtLeast(1)
     }
 
     override fun onStop() {

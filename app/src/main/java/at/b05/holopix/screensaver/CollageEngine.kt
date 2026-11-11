@@ -38,6 +38,41 @@ class CSplit(val horizontal: Boolean, val children: List<CNode>) : CNode() {
         else (1.0 / child.aspect) / children.sumOf { 1.0 / it.aspect }
 }
 
+/**
+ * Bildschirm, für den die Collage gebaut wird. Aus Größe (dp) und Dichte folgen:
+ * - wie viele Fotos höchstens in eine Collage passen (Handy 2, 8"-Tablet 5, 10"+ bis 7),
+ * - die Mindestgröße einer Kachel (keine Briefmarken),
+ * - die Auflösung, mit der Fotos geladen werden.
+ */
+data class ScreenProfile(val widthPx: Int, val heightPx: Int, val density: Float) {
+    val aspect: Double get() = widthPx.toDouble() / heightPx.coerceAtLeast(1)
+    val widthDp: Double get() = widthPx / density.toDouble()
+    val heightDp: Double get() = heightPx / density.toDouble()
+    /** Fotos je Collage nach Bildschirmfläche: ca. 110 000 dp² pro Foto. */
+    val maxPhotos: Int get() = ((widthDp * heightDp) / 110_000.0).toInt().coerceIn(2, 7)
+    /** Kürzeste Kachelseite, unter der ein Foto zu klein wirkt. */
+    val minTileDp: Double get() = if (minOf(widthDp, heightDp) < 480) 140.0 else 170.0
+    val maxEdge: Int get() = maxOf(widthPx, heightPx).coerceIn(800, 3840)
+
+    companion object {
+        /** Ganze Bildschirmfläche (inkl. Bereich der Systemleisten – der Bildschirmschoner läuft im Vollbild). */
+        @Suppress("DEPRECATION")
+        fun of(context: android.content.Context): ScreenProfile {
+            val dm = context.resources.displayMetrics
+            val wm = context.getSystemService(android.view.WindowManager::class.java)
+            var w = dm.widthPixels; var h = dm.heightPixels
+            try {
+                if (android.os.Build.VERSION.SDK_INT >= 30) {
+                    val b = wm.maximumWindowMetrics.bounds; w = b.width(); h = b.height()
+                } else {
+                    val real = android.util.DisplayMetrics(); wm.defaultDisplay.getRealMetrics(real); w = real.widthPixels; h = real.heightPixels
+                }
+            } catch (e: Exception) { }
+            return ScreenProfile(w, h, dm.density)
+        }
+    }
+}
+
 /** Eine fertige Collage: Layout-Baum + geladene Bilder (nach URL). */
 data class Slide(
     val root: CNode,
@@ -148,47 +183,56 @@ class CollageEngine(private val source: at.b05.holopix.data.PhotoSource) {
     private suspend fun aspectOf(p: Photo): Double? =
         aspects[p.url] ?: source.probeAspect(p)?.also { aspects[p.url] = it }
 
+    /** Aufbau der letzten Collage – die nächste soll anders aussehen. */
+    @Volatile private var lastSignature: String? = null
+
     /**
      * Stellt die nächste Collage zusammen.
-     * screenAspect = Breite / Höhe des Bildschirms, maxEdge = maximale Kantenlänge beim Dekodieren.
      *
-     * 1. Ein noch nicht gezeigtes Foto als Anker, dazu bis zu 6 aus demselben Ordner.
+     * 1. Ein noch nicht gezeigtes Foto als Anker, dazu Kandidaten aus demselben Ordner (keine Serienbilder).
      * 2. Von allen nur den Dateikopf lesen (Seitenverhältnis) – schnell, wenige KB pro Foto.
-     * 3. Beste Anordnung berechnen, dann nur die tatsächlich verwendeten Fotos ganz laden.
+     * 3. Beste Anordnung für genau diesen Bildschirm berechnen (Größe, Format, Mindestkachelgröße),
+     *    dann nur die verwendeten Fotos laden – jeweils in der Auflösung ihrer Kachel.
      */
     suspend fun nextSlide(
-        screenAspect: Float,
-        maxEdge: Int,
-        maxOthers: Int = 4,
+        screen: ScreenProfile,
+        maxPhotos: Int = screen.maxPhotos,
         onProgress: (String) -> Unit = {},
     ): Slide? = coroutineScope {
         val anchor = pickAnchor() ?: return@coroutineScope null
         shown += anchor.url
         onProgress("Prüfe Foto „${anchor.name}“")
         val anchorAspect = aspectOf(anchor) ?: return@coroutineScope null
+        val others = (maxPhotos - 1).coerceAtLeast(0)
 
-        // Kandidaten nacheinander prüfen (nur Dateikopf)
-        val cands = neighbours(anchor, if (maxOthers == 0) 0 else 6)
+        // Kandidaten nacheinander prüfen (nur Dateikopf) – etwas mehr als nötig, damit die Auswahl passt
+        val cands = neighbours(anchor, if (others == 0) 0 else minOf(8, others + 3))
         val candLeaves = ArrayList<CLeaf>()
         cands.forEachIndexed { i, p ->
             onProgress("Prüfe Fotos ${i + 1}/${cands.size}")
             aspectOf(p)?.let { candLeaves += CLeaf(p, it) }
         }
 
+        val sigBefore = lastSignature
         var best = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
-            bestLayout(CLeaf(anchor, anchorAspect), candLeaves, screenAspect.toDouble(), maxOthers = maxOthers)
+            bestLayout(CLeaf(anchor, anchorAspect), candLeaves, screen, maxOthers = others, avoidSignature = sigBefore)
         }
         val leaves = best.leaves
-        // Bildgröße je nach Flächenanteil – kleine Kacheln brauchen keine volle Auflösung
-        val edge = if (leaves.size == 1) maxEdge else maxEdge * 2 / 3
+        // Auflösung je Kachel: so groß wie die Kachel auf dem Bildschirm (+ Reserve für den Zoom)
+        val rects = leafRects(best, screen.widthPx.toDouble(), screen.heightPx.toDouble())
         val loaded = leaves.mapIndexed { i, l ->
             onProgress("Lade Foto ${i + 1}/${leaves.size}: ${l.photo.name}")
+            val r = rects[l.photo.url]
+            val edge = if (leaves.size == 1 || r == null) screen.maxEdge
+            else (maxOf(r.first, r.second) * 1.25).toInt().coerceIn(480, screen.maxEdge)
             var lastPct = -1
             source.load(l.photo, edge) { done, total ->
-                val pct = (done * 100 / total).toInt()
-                if (pct / 5 != lastPct / 5) {
-                    lastPct = pct
-                    onProgress("Lade Foto ${i + 1}/${leaves.size}: ${l.photo.name}\n$pct % von ${"%.1f".format(total / 1048576.0)} MB")
+                if (total > 0) {
+                    val pct = (done * 100 / total).toInt()
+                    if (pct / 5 != lastPct / 5) {
+                        lastPct = pct
+                        onProgress("Lade Foto ${i + 1}/${leaves.size}: ${l.photo.name}\n$pct % von ${"%.1f".format(total / 1048576.0)} MB")
+                    }
                 }
             }
         }
@@ -200,31 +244,55 @@ class CollageEngine(private val source: at.b05.holopix.data.PhotoSource) {
         if (images.size < leaves.size) {
             // ein Foto ließ sich nicht laden → mit den geladenen neu anordnen
             val ok = leaves.filter { images.containsKey(it.photo.url) }
-            best = bestLayout(ok.first(), ok.drop(1), screenAspect.toDouble())
+            best = bestLayout(ok.first(), ok.drop(1), screen, maxOthers = ok.size - 1)
             best.leaves.map { it.photo.url }.toSet().let { used -> images.keys.retainAll(used) }
         }
+        lastSignature = signature(best)
         Slide(best, images, captionFor(anchor))
     }
 
     companion object {
-        /** Bester Baum für Anker + Kandidaten. */
-        fun bestLayout(anchor: CLeaf, candidates: List<CLeaf>, screenAspect: Double, rnd: Random = Random, maxOthers: Int = 4): CNode {
-            val target = screenAspect
-            // Einzelbild nur, wenn es (fast) perfekt passt – dann gelegentlich als "Hingucker"
-            val singleFits = abs(ln(anchor.aspect / target)) < 0.12
-            var best: CNode = anchor
-            var bestCost = if (singleFits && rnd.nextFloat() < 0.3f) -1.0 else cost(anchor, target, rnd)
+        /**
+         * Beste Anordnung für Anker + Kandidaten auf diesem Bildschirm.
+         * Bis 5 Fotos werden alle Guillotine-Bäume durchprobiert, darüber zufällige Bäume (sonst zu viele).
+         */
+        fun bestLayout(
+            anchor: CLeaf, candidates: List<CLeaf>, screen: ScreenProfile,
+            rnd: Random = Random, maxOthers: Int = screen.maxPhotos - 1, avoidSignature: String? = null,
+        ): CNode {
+            // gewünschte Fotoanzahl dieses Mal – sorgt für Abwechslung zwischen ruhigen und vollen Collagen
+            val maxLeaves = (maxOthers + 1).coerceAtLeast(1)
+            val preferred = if (maxLeaves <= 2) maxLeaves else 2 + rnd.nextInt(maxLeaves - 1)
+            fun score(t: CNode) = cost(t, screen, preferred, avoidSignature, rnd)
 
-            val others = candidates.take(6)
+            var best: CNode = anchor
+            var bestCost = score(anchor)
+            // Einzelbild, das (fast) perfekt passt, gelegentlich bewusst als "Hingucker"
+            if (abs(ln(anchor.aspect / screen.aspect)) < 0.12 && rnd.nextFloat() < 0.25f) bestCost -= 1.0
+
+            val others = candidates.take(8)
             val n = others.size
-            for (mask in 1 until (1 shl n)) {
-                if (Integer.bitCount(mask) > maxOthers) continue
+            // 1) exakt: alle Teilmengen bis 4 Partner (≤ 5 Fotos) aus den ersten 6 Kandidaten
+            val exactN = minOf(n, 6)
+            for (mask in 1 until (1 shl exactN)) {
+                val k = Integer.bitCount(mask)
+                if (k > minOf(maxOthers, 4)) continue
                 val set = ArrayList<CNode>().apply {
                     add(anchor)
-                    for (i in 0 until n) if (mask and (1 shl i) != 0) add(others[i])
+                    for (i in 0 until exactN) if (mask and (1 shl i) != 0) add(others[i])
                 }
                 for (t in trees(set)) {
-                    val c = cost(t, target, rnd)
+                    val c = score(t)
+                    if (c < bestCost) { bestCost = c; best = t }
+                }
+            }
+            // 2) große Bildschirme: 6–8 Fotos über zufällige Bäume
+            if (maxOthers >= 5 && n >= 5) {
+                repeat(6000) {
+                    val k = 5 + rnd.nextInt(minOf(maxOthers, n) - 4) // 5 … maxOthers Partner
+                    val set = ArrayList<CNode>(k + 1).apply { add(anchor); addAll(others.shuffled(rnd).take(k)) }
+                    val t = randomTree(set, rnd)
+                    val c = score(t)
                     if (c < bestCost) { bestCost = c; best = t }
                 }
             }
@@ -251,25 +319,66 @@ class CollageEngine(private val source: at.b05.holopix.data.PhotoSource) {
             return out
         }
 
-        private fun leafShares(node: CNode, share: Double, out: MutableList<Double>) {
+        private fun randomTree(items: List<CNode>, rnd: Random): CNode {
+            if (items.size == 1) return items[0]
+            val shuffled = items.shuffled(rnd)
+            val cut = 1 + rnd.nextInt(shuffled.size - 1)
+            return CSplit(rnd.nextBoolean(), listOf(randomTree(shuffled.take(cut), rnd), randomTree(shuffled.drop(cut), rnd)))
+        }
+
+        /** Kachelgrößen (Breite, Höhe) je Foto, wenn der Baum die Fläche w × h füllt – genau wie beim Zeichnen. */
+        fun leafRects(node: CNode, w: Double, h: Double, out: MutableMap<String, Pair<Double, Double>> = HashMap()): Map<String, Pair<Double, Double>> {
             when (node) {
-                is CLeaf -> out += share
-                is CSplit -> node.children.forEach { leafShares(it, share * node.share(it), out) }
+                is CLeaf -> out[node.photo.url] = w to h
+                is CSplit -> node.children.forEach { c ->
+                    val f = node.share(c)
+                    if (node.horizontal) leafRects(c, w * f, h, out) else leafRects(c, w, h * f, out)
+                }
+            }
+            return out
+        }
+
+        private fun leafRectList(node: CNode, w: Double, h: Double, out: MutableList<Triple<Double, Double, Double>>) {
+            when (node) {
+                is CLeaf -> out += Triple(w, h, node.aspect)
+                is CSplit -> node.children.forEach { c ->
+                    val f = node.share(c)
+                    if (node.horizontal) leafRectList(c, w * f, h, out) else leafRectList(c, w, h * f, out)
+                }
             }
         }
 
-        /** Kleiner ist besser. */
-        private fun cost(node: CNode, target: Double, rnd: Random): Double {
-            var c = abs(ln(node.aspect / target)) * 3.0          // Beschnitt / Ränder
-            val shares = ArrayList<Double>().also { leafShares(node, 1.0, it) }
-            val minShare = shares.minOrNull() ?: 1.0
-            if (minShare < 0.12) c += (0.12 - minShare) * 12.0  // keine Briefmarken
-            val maxShare = shares.maxOrNull() ?: 1.0
-            if (shares.size > 1 && maxShare > 0.75) c += (maxShare - 0.75) * 3.0
-            c += when (shares.size) { 1 -> 0.35; 2 -> 0.0; 3 -> 0.02; 4 -> 0.06; else -> 0.12 }
-            // Abwechslung: manchmal bewusst eine größere Collage bevorzugen
-            if (shares.size >= 3 && rnd.nextFloat() < 0.35f) c -= 0.08
-            return c + rnd.nextDouble() * 0.08
+        /** Aufbau als Text (Anzahl + Teilungsrichtungen), um gleiche Collagen hintereinander zu vermeiden. */
+        fun signature(node: CNode): String = when (node) {
+            is CLeaf -> if (node.aspect >= 1) "L" else "P"
+            is CSplit -> (if (node.horizontal) "H(" else "V(") + node.children.joinToString(",") { signature(it) } + ")"
+        }
+
+        /**
+         * Bewertung – kleiner ist besser. Gerechnet wird mit den echten Kachelgrößen auf dem Bildschirm:
+         * - Beschnitt je Foto (Flächen-gewichtet): Foto-Format gegen Kachel-Format,
+         * - zu kleine Kacheln (unter der Mindestgröße in dp),
+         * - zu ungleiche Größen (ein Riesenfoto neben Briefmarken),
+         * - Abweichung von der gewünschten Fotoanzahl, Wiederholung der letzten Anordnung.
+         */
+        private fun cost(node: CNode, screen: ScreenProfile, preferred: Int, avoidSignature: String?, rnd: Random): Double {
+            val rects = ArrayList<Triple<Double, Double, Double>>()
+            leafRectList(node, screen.widthDp, screen.heightDp, rects)
+            val total = screen.widthDp * screen.heightDp
+            var c = 0.0
+            var minArea = Double.MAX_VALUE; var maxArea = 0.0
+            for ((w, h, a) in rects) {
+                val area = w * h
+                minArea = minOf(minArea, area); maxArea = maxOf(maxArea, area)
+                c += (area / total) * abs(ln(a / (w / h))) * 4.0          // Beschnitt
+                val short = minOf(w, h)
+                if (short < screen.minTileDp) c += (screen.minTileDp - short) / screen.minTileDp * 2.0 // Briefmarken
+            }
+            val n = rects.size
+            if (n > 1 && maxArea / minArea > 4.0) c += (ln(maxArea / minArea) - ln(4.0)) * 0.6       // Gleichgewicht
+            c += if (n == 1) 0.35 else abs(n - preferred) * 0.05
+            if (avoidSignature != null && n > 1 && signature(node) == avoidSignature) c += 0.15
+            return c + rnd.nextDouble() * 0.06
         }
 
         /** Reihenfolge der Kinder zufällig drehen – gleiche Passform, andere Optik. */

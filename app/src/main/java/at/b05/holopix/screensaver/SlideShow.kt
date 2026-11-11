@@ -25,8 +25,8 @@ class SlideShow(private val scope: CoroutineScope) {
     var status by mutableStateOf<String?>(null)
         private set
 
-    var screenAspect = 1.6f
-    var maxEdge = 1920
+    /** Aktueller Bildschirm (wird bei jeder Collage neu abgefragt – Drehen/anderes Gerät passt sich an). */
+    var screen: () -> ScreenProfile = { ScreenProfile(1600, 1000, 2f) }
 
     private var job: Job? = null
     private val collage get() = Holo.collage
@@ -64,17 +64,31 @@ class SlideShow(private val scope: CoroutineScope) {
                 var failures = 0
                 val progress: (String) -> Unit = { p -> if (slide == null) status = "Lade Fotos …\n$p" }
                 // erstes Bild schnell (höchstens 2 Fotos), danach volle Collagen
-                var pending = next { collage.nextSlide(screenAspect, maxEdge, maxOthers = 1, onProgress = progress) }
+                var forScreen = screen()
+                var pending = next { collage.nextSlide(forScreen, maxPhotos = 2, onProgress = progress) }
                 while (isActive) {
                     val n = withTimeoutOrNull(120_000) { pending.await() }
                     if (n == null && pending.isActive) {
                         pending.cancel()
                         photos.lastError = (photos.lastError ?: "") + " (Zeitüberschreitung nach 2 Minuten)"
                     }
-                    pending = next { collage.nextSlide(screenAspect, maxEdge, onProgress = progress) }
+                    forScreen = screen()
+                    val target = forScreen
+                    pending = next { collage.nextSlide(target, onProgress = progress) }
                     if (n != null) {
                         slide = n; failures = 0; status = null
-                        delay(prefs.collageSeconds.coerceAtLeast(5) * 1000L)
+                        // warten – wird der Bildschirm gedreht, sofort eine passende neue Collage bauen
+                        val until = System.currentTimeMillis() + prefs.collageSeconds.coerceAtLeast(5) * 1000L
+                        while (System.currentTimeMillis() < until) {
+                            delay(500)
+                            val now = screen()
+                            if (kotlin.math.abs(now.aspect - target.aspect) > 0.05) {
+                                pending.cancel()
+                                forScreen = now
+                                pending = next { collage.nextSlide(now, maxPhotos = 2, onProgress = progress) }
+                                break
+                            }
+                        }
                     } else {
                         failures++
                         if (slide == null) status = "Lade Fotos … (${failures}. Versuch)" + (photos.lastError?.let { "\nLetzter Fehler: $it" } ?: "")
@@ -82,7 +96,9 @@ class SlideShow(private val scope: CoroutineScope) {
                             status = "Fotos konnten nicht geladen werden.\n" + (photos.lastError ?: "Unbekannter Fehler") + "\nNeuer Versuch in 1 Minute."
                             delay(60_000); failures = 0
                             pending.cancel()
-                            pending = next { collage.nextSlide(screenAspect, maxEdge, maxOthers = 1, onProgress = progress) }
+                            forScreen = screen()
+                            val s2 = forScreen
+                            pending = next { collage.nextSlide(s2, maxPhotos = 2, onProgress = progress) }
                         }
                     }
                 }
