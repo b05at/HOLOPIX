@@ -21,6 +21,13 @@ class MainActivity : ComponentActivity() {
         setContent {
             val sysDark = isSystemInDarkTheme()
             Z.dark = when (vm.themeMode) { "dark" -> true; "light" -> false; else -> sysDark }
+            // Statusleisten-Symbole passend zum gewählten Modus (hell/dunkel)
+            val dark = Z.dark
+            androidx.compose.runtime.LaunchedEffect(dark) {
+                val style = if (dark) androidx.activity.SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
+                else androidx.activity.SystemBarStyle.light(android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT)
+                enableEdgeToEdge(statusBarStyle = style, navigationBarStyle = style)
+            }
             HolopixTheme { SettingsScreen(vm) }
         }
     }

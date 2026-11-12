@@ -49,8 +49,9 @@ private val DARK = Palette(
     bg = Color(0xFF131314),
     card = Color(0xFF1E1F20),
     line = Color(0xFF3C4043),
-    text = Color(0xFFE3E3E3),
-    textSoft = Color(0xFF9AA0A6),
+    // Dunkelmodus: Schrift weiß, Nebentexte hellgrau – gut lesbar
+    text = Color(0xFFFFFFFF),
+    textSoft = Color(0xFFD0D4D9),
     tip = Color(0xFF3A3324),
     chip = Color(0xFF2D2F31),
     warn = Color(0xFFFFB95C),
@@ -87,7 +88,8 @@ fun HolopixTheme(content: @Composable () -> Unit) {
             secondary = Color(0xFF4DB6AC),
             background = Z.Bg, surface = Z.Card, surfaceContainer = Z.Card, surfaceContainerHigh = Z.Chip,
             onSurface = Z.Text, onBackground = Z.Text, onSurfaceVariant = Z.TextSoft,
-            outline = Z.Line, outlineVariant = Z.Line, error = Z.Warn,
+            surfaceVariant = Z.Chip, inverseSurface = Color(0xFFE3E3E3), inverseOnSurface = Color(0xFF1F1F1F),
+            outline = Color(0xFF8E9399), outlineVariant = Z.Line, error = Z.Warn,
         )
     } else {
         lightColorScheme(
@@ -99,7 +101,10 @@ fun HolopixTheme(content: @Composable () -> Unit) {
             outline = Z.Line, error = Z.Warn,
         )
     }
-    MaterialTheme(colorScheme = scheme, content = content)
+    MaterialTheme(colorScheme = scheme) {
+        // Texte ohne eigene Farbe erben die Schriftfarbe des Themas (sonst schwarz auf dunklem Grund)
+        androidx.compose.runtime.CompositionLocalProvider(androidx.compose.material3.LocalContentColor provides Z.Text, content = content)
+    }
 }
 
 /** true = schmales Gerät (Smartphone, < 600 dp Breite) → eigene, einspaltige Aufteilung. */
