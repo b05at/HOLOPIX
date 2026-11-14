@@ -44,11 +44,6 @@ class IdleService : Service() {
 
     private val screenReceiver = object : BroadcastReceiver() {
         override fun onReceive(c: Context, i: Intent) {
-            if (i.action == Intent.ACTION_POWER_CONNECTED || i.action == Intent.ACTION_POWER_DISCONNECTED) {
-                // Ladekabel: Ladezustand sofort per MQTT melden
-                handler.postDelayed({ BatteryMqtt.tick(this@IdleService) }, 1500)
-                return
-            }
             // Bildschirm an / entsperrt zählt als Bedienung
             Holo.onUserActivity()
             if (i.action == Intent.ACTION_SCREEN_ON) {
@@ -85,7 +80,6 @@ class IdleService : Service() {
         goForeground()
         registerReceiver(screenReceiver, IntentFilter().apply {
             addAction(Intent.ACTION_SCREEN_ON); addAction(Intent.ACTION_USER_PRESENT)
-            addAction(Intent.ACTION_POWER_CONNECTED); addAction(Intent.ACTION_POWER_DISCONNECTED)
         })
         Holo.onUserActivity()
         handler.post(tick)
@@ -116,7 +110,6 @@ class IdleService : Service() {
     private fun check() {
         val p = Holo.prefs
         if (!Holo.serviceNeeded()) { stopSelf(); return }
-        BatteryMqtt.tick(this)
         updateOverlay()
         if (System.currentTimeMillis() - lastUpdateCheck > 6 * 3600_000L) { lastUpdateCheck = System.currentTimeMillis(); UpdateNotifier.check(this) }
         val pm = getSystemService(PowerManager::class.java)

@@ -156,7 +156,6 @@ fun SettingsScreen(vm: SettingsVm) {
                         }
                     }
                 }
-                MqttSection(vm)
                 UpdateSection(vm)
                 Spacer(Modifier.height(60.dp))
             }
@@ -554,59 +553,6 @@ private fun WeatherSection(vm: SettingsVm) {
                 }
             }
             Hint("Wetterdaten von Open-Meteo (kostenlos, ohne Schlüssel).")
-        }
-    }
-}
-
-// ---------------- MQTT ----------------
-
-@Composable
-private fun MqttSection(vm: SettingsVm) {
-    val p = vm.prefs
-    val ctx = LocalContext.current
-    val phone = LocalConfiguration.current.screenWidthDp < 600
-    Section("MQTT · Akkustand senden") {
-        SwitchRow("Akkustand per MQTT senden", vm.mqttEnabled) { vm.setMqttEnabled(it) }
-        if (vm.mqttEnabled) {
-            var host by remember { mutableStateOf(p.mqttHost) }
-            var port by remember { mutableStateOf(p.mqttPort.toString()) }
-            var user by remember { mutableStateOf(p.mqttUser) }
-            var pw by remember { mutableStateOf(p.mqttPassword) }
-            var topic by remember { mutableStateOf(p.mqttTopic) }
-            var name by remember { mutableStateOf(p.mqttDeviceName) }
-            var disco by remember { mutableStateOf(p.mqttDiscovery) }
-            fun save() {
-                p.mqttHost = host.trim(); p.mqttPort = port.trim().toIntOrNull() ?: 1883
-                p.mqttUser = user.trim(); p.mqttPassword = pw
-                p.mqttTopic = topic.trim(); p.mqttDeviceName = name.trim(); p.mqttDiscovery = disco
-            }
-            FlowRow(maxItemsInEachRow = if (phone) 1 else 2, horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(host, { host = it }, label = { Text("Broker-IP oder Name") }, singleLine = true, modifier = Modifier.weight(1f).keepVisibleWhenFocused())
-                OutlinedTextField(port, { port = it.filter(Char::isDigit).take(5) }, label = { Text("Port") }, singleLine = true,
-                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
-                    modifier = Modifier.weight(1f).keepVisibleWhenFocused())
-                OutlinedTextField(user, { user = it }, label = { Text("Benutzer") }, singleLine = true, modifier = Modifier.weight(1f).keepVisibleWhenFocused())
-                PasswordField(pw, { pw = it }, "Passwort", Modifier.weight(1f))
-                OutlinedTextField(topic, { topic = it }, label = { Text("Thema (leer = ${at.b05.holopix.service.BatteryMqtt.defaultTopic(ctx)})") },
-                    singleLine = true, modifier = Modifier.weight(1f).keepVisibleWhenFocused())
-                OutlinedTextField(name, { name = it }, label = { Text("Gerätename in Home Assistant (optional)") }, singleLine = true,
-                    modifier = Modifier.weight(1f).keepVisibleWhenFocused())
-            }
-            var interval by remember { mutableIntStateOf(p.mqttIntervalMinutes) }
-            Stepper("Senden alle $interval Min",
-                onMinus = { interval = (interval - 5).coerceAtLeast(5); p.mqttIntervalMinutes = interval },
-                onPlus = { interval = (interval + 5).coerceAtMost(240); p.mqttIntervalMinutes = interval })
-            SwitchRow("Home Assistant: Sensoren automatisch anlegen (MQTT-Discovery)", disco) { disco = it }
-            val t = topic.trim().trimEnd('/').ifBlank { at.b05.holopix.service.BatteryMqtt.defaultTopic(ctx) }
-            Hint("Themen: $t/battery (0–100), $t/charging (ON/OFF), $t/state (JSON mit Akku, Laden, Temperatur) – mit „retain“. " +
-                "Gesendet wird alle $interval Minuten und sofort beim Ein-/Ausstecken des Ladekabels.")
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = { save(); vm.sendMqttNow() }, enabled = !vm.mqttSending && host.isNotBlank()) {
-                    Text(if (vm.mqttSending) "Sende …" else "Jetzt senden (Test)")
-                }
-            }
-            vm.mqttResult?.let { Text(it, color = if (it.contains("Fehler")) Z.Warn else Z.TextSoft, fontSize = 14.sp) }
-            DisposableSave { save() }
         }
     }
 }

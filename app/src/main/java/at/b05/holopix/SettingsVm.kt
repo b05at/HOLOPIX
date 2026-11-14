@@ -90,23 +90,6 @@ class SettingsVm(app: Application) : AndroidViewModel(app) {
         message = if (on) "Kiosk-Modus an – zum Beenden 4× schnell auf den Bildschirm tippen" else "Kiosk-Modus aus"
     }
 
-    // ---------- MQTT ----------
-
-    var mqttEnabled by mutableStateOf(prefs.mqttEnabled)
-        private set
-    var mqttSending by mutableStateOf(false)
-    var mqttResult by mutableStateOf(prefs.mqttLastResult.ifBlank { null })
-
-    fun setMqttEnabled(on: Boolean) { mqttEnabled = on; prefs.mqttEnabled = on; IdleService.refresh(ctx) }
-
-    fun sendMqttNow() {
-        if (mqttSending) return
-        mqttSending = true
-        viewModelScope.launch {
-            try { mqttResult = at.b05.holopix.service.BatteryMqtt.sendNow(ctx) } finally { mqttSending = false }
-        }
-    }
-
     // ---------- Display-Zeitplan ----------
 
     var displayScheduleEnabled by mutableStateOf(prefs.displayScheduleEnabled)
