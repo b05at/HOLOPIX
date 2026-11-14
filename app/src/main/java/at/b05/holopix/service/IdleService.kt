@@ -174,7 +174,7 @@ class IdleService : Service() {
     /** Direktes Einschalten klappt hier nicht und Android hat die Vollbild-Berechtigung (z. B. nach Update) entzogen → Hinweis. */
     private fun remindFullScreen() {
         val p = Holo.prefs
-        if (!p.displayScheduleEnabled || p.wakeDirectWorks != 0 || at.b05.holopix.display.DisplaySchedule.fullScreenAllowed(this)) return
+        if (!p.displayScheduleEnabled || at.b05.holopix.display.DisplaySchedule.fullScreenAllowed(this)) return
         try {
             val nm = getSystemService(NotificationManager::class.java)
             nm.createNotificationChannel(NotificationChannel("holopix_hint", "Hinweise", NotificationManager.IMPORTANCE_DEFAULT))
@@ -185,8 +185,8 @@ class IdleService : Service() {
             nm.notify(3, NotificationCompat.Builder(this, "holopix_hint")
                 .setSmallIcon(R.drawable.ic_notification)
                 .setContentTitle("Vollbild-Benachrichtigungen erneut erlauben")
-                .setContentText("Android hat das Recht beim Update entzogen – nötig, damit der Zeitplan das Display einschaltet.")
-                .setStyle(NotificationCompat.BigTextStyle().bigText("Android hat das Recht beim Update entzogen. Auf diesem Gerät ist es nötig, damit der Display-Zeitplan das Display einschaltet. Antippen und für HOLOPIX erlauben."))
+                .setContentText("Nötig, damit der Zeitplan das Display einschaltet.")
+                .setStyle(NotificationCompat.BigTextStyle().bigText("Android hat das Recht (z. B. beim Update) entzogen. Es ist nötig, damit der Display-Zeitplan das Display einschaltet. Antippen und für HOLOPIX erlauben."))
                 .setContentIntent(pi).setAutoCancel(true).build())
         } catch (e: Exception) { }
     }

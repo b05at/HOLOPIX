@@ -347,16 +347,6 @@ private fun Permissions(vm: SettingsVm) {
     }
 }
 
-/** Optionale Berechtigung: fehlt sie, wird das neutral (–) statt als Warnung angezeigt. */
-@Composable
-private fun OptionalPermRow(label: String, ok: Boolean, onFix: () -> Unit) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(if (ok) "✓" else "–", color = if (ok) Z.Primary else Z.TextSoft, fontWeight = FontWeight.Bold, fontSize = 18.sp, modifier = Modifier.width(26.dp))
-        Text(label, Modifier.weight(1f), color = Z.Text, fontSize = 15.sp)
-        if (!ok) TextButton(onClick = onFix) { Text("Erlauben") }
-    }
-}
-
 @Composable
 private fun PermRow(label: String, ok: Boolean, onFix: () -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -712,21 +702,13 @@ private fun WakeChecklist(vm: SettingsVm) {
         PermRow("Exakte Wecker (pünktliches Ein-/Ausschalten)", exact) {
             if (android.os.Build.VERSION.SDK_INT >= 31) open(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM)
         }
-        // Mit „Über anderen Apps einblenden“ startet HOLOPIX den Bildschirmschoner direkt und weckt damit das Display.
-        // Vollbild-Benachrichtigungen sind dann nur noch ein Rückfall – Android 14 entzieht dieses Recht bei jedem Update.
-        val overlayOk = remember(tick) { Settings.canDrawOverlays(ctx) }
-        PermRow("Über anderen Apps einblenden (weckt das Display)", overlayOk) { open(Settings.ACTION_MANAGE_OVERLAY_PERMISSION) }
-        OptionalPermRow("Benachrichtigungen – optional", notif) { open(Settings.ACTION_APPLICATION_DETAILS_SETTINGS) }
         val p = vm.prefs
-        val openFull = { if (android.os.Build.VERSION.SDK_INT >= 34) open(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT) }
-        when (p.wakeDirectWorks) {
-            // auf diesem Gerät nötig: als Pflicht (mit Warnzeichen) anzeigen
-            0 -> PermRow("Vollbild-Benachrichtigungen – auf diesem Gerät nötig (Android 14 setzt sie bei Updates zurück)", full) { openFull() }
-            1 -> OptionalPermRow("Vollbild-Benachrichtigungen – nicht nötig, direktes Einschalten klappt", full) { openFull() }
-            else -> OptionalPermRow("Vollbild-Benachrichtigungen – Rückfall; ob nötig, zeigt der Test unten", full) { openFull() }
+        PermRow("Benachrichtigungen (zum Einschalten nötig)", notif) { open(Settings.ACTION_APPLICATION_DETAILS_SETTINGS) }
+        PermRow("Vollbild-Benachrichtigungen (Android 14 setzt sie bei Updates zurück – HOLOPIX erinnert daran)", full) {
+            if (android.os.Build.VERSION.SDK_INT >= 34) open(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT)
         }
         val last = remember(tick) { p.wakeLastResult }
-        if (last.isNotBlank()) Text("Letztes Einschalten: $last", color = if (p.wakeDirectWorks == 0 && !full) Z.Warn else Z.TextSoft, fontSize = 14.sp)
+        if (last.isNotBlank()) Text("Letztes Einschalten: $last", color = if (!full) Z.Warn else Z.TextSoft, fontSize = 14.sp)
         OutlinedButton(onClick = {
             ds.scheduleTestWake(ctx)
             android.widget.Toast.makeText(ctx,

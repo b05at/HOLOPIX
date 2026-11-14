@@ -152,9 +152,6 @@ object DisplaySchedule {
             ).acquire(10_000)
         } catch (e: Exception) { }
         if (pm.isInteractive) return // Display ist schon an
-        // Rückfall, falls das Display nicht schon durch den direkten Start des Bildschirmschoners angeht:
-        // Vollbild-Benachrichtigung – nur wenn erlaubt (Android 14 entzieht das Recht bei jedem App-Update)
-        if (!fullScreenAllowed(context)) return
         try {
             val nm = context.getSystemService(android.app.NotificationManager::class.java)
             if (nm.getNotificationChannel(WAKE_CHANNEL) == null) {
@@ -187,30 +184,23 @@ object DisplaySchedule {
     }
 
     /**
-     * Display einschalten und prüfen, ob es geklappt hat:
-     * 1. Bildschirmschoner direkt starten (erlaubt durch „Über anderen Apps einblenden“) – schaltet das Display ein.
-     * 2. Nach 3 s nachsehen. War das Display aus und ist es noch aus → Vollbild-Benachrichtigung als Rückfall.
-     * Das Ergebnis wird gespeichert; die Einstellungen markieren die Vollbild-Berechtigung dann als nötig.
+     * Display einschalten: immer über die Vollbild-Benachrichtigung (wie Wecker-Apps), zusätzlich direkter Start
+     * des Bildschirmschoners. Nach 3 s wird das Ergebnis für die Einstellungen gespeichert.
      */
     fun wakeChecked(context: Context, pending: android.content.BroadcastReceiver.PendingResult, test: Boolean) {
         val pm = context.getSystemService(PowerManager::class.java)
         val wasOff = pm?.isInteractive == false
+        wakeScreen(context)
         Holo.startScreensaver(context, wake = true)
         android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
             try {
-                val prefs = Holo.prefs
                 val time = LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("dd.MM. HH:mm"))
                 val what = if (test) "Test" else "Zeitplan"
-                if (!wasOff) {
-                    if (test) prefs.wakeLastResult = "$time · $what: Display war schon an – zum Testen nach dem Tippen den Ein-/Aus-Knopf drücken"
-                } else if (pm?.isInteractive == true) {
-                    prefs.wakeDirectWorks = 1
-                    prefs.wakeLastResult = "$time · $what: Display eingeschaltet ✓ (direkt, ohne Vollbild-Benachrichtigung)"
-                } else {
-                    prefs.wakeDirectWorks = 0
-                    wakeScreen(context) // Rückfall
-                    prefs.wakeLastResult = "$time · $what: direktes Einschalten klappt auf diesem Gerät nicht – " +
-                        if (fullScreenAllowed(context)) "Vollbild-Benachrichtigung verwendet" else "bitte „Vollbild-Benachrichtigungen“ erlauben"
+                Holo.prefs.wakeLastResult = when {
+                    !wasOff -> if (test) "$time · $what: Display war schon an – zum Testen nach dem Tippen den Ein-/Aus-Knopf drücken" else Holo.prefs.wakeLastResult
+                    pm?.isInteractive == true -> "$time · $what: Display eingeschaltet ✓"
+                    !fullScreenAllowed(context) -> "$time · $what: Display blieb aus – „Vollbild-Benachrichtigungen“ erlauben"
+                    else -> "$time · $what: Display blieb aus"
                 }
             } catch (e: Exception) { }
             pending.finish()

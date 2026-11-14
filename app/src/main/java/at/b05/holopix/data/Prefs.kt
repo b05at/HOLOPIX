@@ -45,8 +45,7 @@ class Prefs(context: Context) {
     var kioskPinSalt by S("kiosk_pin_salt")
     /** Sperrbildschirm überspringen (Wischsperre automatisch wegblenden, Bildschirmschoner über dem Sperrbildschirm). */
     var skipKeyguard by B("skip_keyguard", true)
-    /** Ergebnis des letzten Weckens aus ausgeschaltetem Display: 1 = direkter Start schaltet ein, 0 = nicht, -1 = unbekannt. */
-    var wakeDirectWorks by I("wake_direct", -1)
+    /** Ergebnis des letzten Einschaltens (Anzeige in den Einstellungen). */
     var wakeLastResult by S("wake_last")
 
     // SMB
