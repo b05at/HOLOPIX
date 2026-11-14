@@ -119,6 +119,22 @@ object Holo {
         }
     }
 
+    // ---------- Kiosk-PIN ----------
+
+    val kioskPinSet: Boolean get() = prefs.kioskPinHash.isNotBlank()
+
+    private fun hash(pin: String, salt: String): String =
+        java.security.MessageDigest.getInstance("SHA-256").digest((salt + ":" + pin).toByteArray())
+            .joinToString("") { "%02x".format(it) }
+
+    fun checkKioskPin(pin: String): Boolean = !kioskPinSet || hash(pin, prefs.kioskPinSalt) == prefs.kioskPinHash
+
+    fun setKioskPin(pin: String?) {
+        if (pin.isNullOrBlank()) { prefs.kioskPinHash = ""; prefs.kioskPinSalt = ""; return }
+        val salt = java.util.UUID.randomUUID().toString()
+        prefs.kioskPinSalt = salt; prefs.kioskPinHash = hash(pin, salt)
+    }
+
     /** Hintergrunddienst nötig: automatischer Bildschirmschoner, Zeitplan, Besucher- oder Kiosk-Modus. */
     fun serviceNeeded(): Boolean = prefs.enabled || prefs.displayScheduleEnabled || prefs.visitorMode || prefs.kioskMode
 

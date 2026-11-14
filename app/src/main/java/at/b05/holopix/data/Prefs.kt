@@ -40,6 +40,9 @@ class Prefs(context: Context) {
     var visitorMode by B("visitor", false)
     /** Kiosk-Modus: Bildschirmschoner dauerhaft, Beenden nur durch 4× Tippen. Zeitplan & Einschaltverhalten bleiben. */
     var kioskMode by B("kiosk", false)
+    /** Kiosk-PIN (nur als Hash gespeichert); leer = keine PIN. */
+    var kioskPinHash by S("kiosk_pin")
+    var kioskPinSalt by S("kiosk_pin_salt")
     /** Sperrbildschirm überspringen (Wischsperre automatisch wegblenden, Bildschirmschoner über dem Sperrbildschirm). */
     var skipKeyguard by B("skip_keyguard", true)
 

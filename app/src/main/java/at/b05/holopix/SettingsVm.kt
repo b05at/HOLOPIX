@@ -54,8 +54,36 @@ class SettingsVm(app: Application) : AndroidViewModel(app) {
     // ---------- Kiosk-Modus ----------
 
     val kioskMode get() = Holo.kioskMode
+    /** Laufender PIN-Dialog: "off" (Kiosk aus), "set1"/"set2" (neue PIN), "change", "remove". */
+    var pinFlow by mutableStateOf<String?>(null)
+    var kioskPinSet by mutableStateOf(Holo.kioskPinSet)
+        private set
+    private var newPin = ""
+
+    /** Eingabe im PIN-Dialog; false = falsche PIN bzw. Wiederholung passt nicht. */
+    fun pinEntered(pin: String): Boolean {
+        when (pinFlow) {
+            "off" -> { if (!Holo.checkKioskPin(pin)) return false; pinFlow = null; Holo.setKiosk(ctx, false); message = "Kiosk-Modus aus" }
+            "change" -> { if (!Holo.checkKioskPin(pin)) return false; pinFlow = "set1" }
+            "remove" -> {
+                if (!Holo.checkKioskPin(pin)) return false
+                Holo.setKioskPin(null); kioskPinSet = false; pinFlow = null; message = "PIN entfernt"
+            }
+            "set1" -> {
+                if (pin.length < 4) { message = "Die PIN braucht mindestens 4 Ziffern"; return false }
+                newPin = pin; pinFlow = "set2"
+            }
+            "set2" -> {
+                if (pin != newPin) { pinFlow = "set1"; message = "Die PINs stimmen nicht überein – bitte neu eingeben"; return true }
+                Holo.setKioskPin(pin); kioskPinSet = true; newPin = ""; pinFlow = null; message = "PIN gespeichert"
+            }
+        }
+        return true
+    }
+
     fun toggleKiosk() {
         val on = !Holo.kioskMode
+        if (!on && Holo.kioskPinSet) { pinFlow = "off"; return }
         if (on && !Holo.photos.ready) { message = "Zuerst eine Fotoquelle einrichten"; return }
         Holo.setKiosk(ctx, on)
         message = if (on) "Kiosk-Modus an – zum Beenden 4× schnell auf den Bildschirm tippen" else "Kiosk-Modus aus"

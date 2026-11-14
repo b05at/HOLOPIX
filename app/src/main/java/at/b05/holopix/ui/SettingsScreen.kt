@@ -262,6 +262,43 @@ private fun KioskSection(vm: SettingsVm) {
         Hint("Display-Zeitplan, Wecken und Einschalten von Hand bleiben wie eingestellt: im Zeitraum bleibt das Display an, außerhalb " +
             "schaltet Android es nach seinem Zeitlimit aus. Sobald das Display an ist, erscheint sofort der Bildschirmschoner. " +
             "Auch über das Schloss-Symbol oben schaltbar.")
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                if (vm.kioskPinSet) "PIN aktiv – nach 4× Tippen muss die PIN eingegeben werden."
+                else "Keine PIN – 4× Tippen beendet den Kiosk-Modus direkt.",
+                Modifier.weight(1f), color = Z.Text, fontSize = 15.sp,
+            )
+        }
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (!vm.kioskPinSet) {
+                Button(onClick = { vm.pinFlow = "set1" }) { Text("PIN vergeben") }
+            } else {
+                OutlinedButton(onClick = { vm.pinFlow = "change" }) { Text("PIN ändern") }
+                OutlinedButton(onClick = { vm.pinFlow = "remove" }) { Text("PIN entfernen") }
+            }
+        }
+        Hint("4–8 Ziffern. Ändern und Entfernen nur mit der aktuellen PIN. Ohne Eingabe schließt sich das Zahlenfeld nach 30 s.")
+    }
+    vm.pinFlow?.let { flow ->
+        androidx.compose.ui.window.Dialog(
+            onDismissRequest = { vm.pinFlow = null },
+            properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
+        ) {
+            // key = flow: neues Zahlenfeld (leer) für jeden Schritt
+            androidx.compose.runtime.key(flow) {
+                PinPad(
+                    title = when (flow) {
+                        "off" -> "PIN zum Beenden des Kiosk-Modus"
+                        "change" -> "Aktuelle PIN eingeben"
+                        "remove" -> "Aktuelle PIN zum Entfernen"
+                        "set1" -> "Neue PIN (4–8 Ziffern)"
+                        else -> "Neue PIN wiederholen"
+                    },
+                    onSubmit = { vm.pinEntered(it) },
+                    onCancel = { vm.pinFlow = null },
+                )
+            }
+        }
     }
 }
 

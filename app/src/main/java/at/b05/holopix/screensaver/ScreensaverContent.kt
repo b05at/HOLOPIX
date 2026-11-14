@@ -28,13 +28,17 @@ fun ScreensaverContent(show: SlideShow, onTick: () -> Unit, onDismiss: () -> Uni
     // Kiosk-Modus: erst 4× schnell tippen beendet ihn
     var taps by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(0) }
     var lastTap by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(0L) }
+    var askPin by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
     val onTap: () -> Unit = {
         if (!Holo.kioskMode) onDismiss()
         else {
             val t = System.currentTimeMillis()
             taps = if (t - lastTap < 1200) taps + 1 else 1
             lastTap = t
-            if (taps >= 4) { taps = 0; Holo.setKiosk(context, false); onDismiss() }
+            if (taps >= 4) {
+                taps = 0
+                if (Holo.kioskPinSet) askPin = true else { Holo.setKiosk(context, false); onDismiss() }
+            }
         }
     }
     androidx.compose.runtime.LaunchedEffect(lastTap) { delay(1500); taps = 0 }
@@ -53,7 +57,15 @@ fun ScreensaverContent(show: SlideShow, onTick: () -> Unit, onDismiss: () -> Uni
         style = OverlayStyle(p.ssOverlayPos, p.ssOverlaySize, p.ssShowCaption, p.ssPixelShift),
         onDismiss = onTap,
     )
-    if (Holo.kioskMode && taps in 1..3) {
+    if (askPin) {
+        at.b05.holopix.ui.PinPad(
+            title = "PIN zum Beenden des Kiosk-Modus",
+            onSubmit = { pin ->
+                if (Holo.checkKioskPin(pin)) { askPin = false; Holo.setKiosk(context, false); onDismiss(); true } else false
+            },
+            onCancel = { askPin = false },
+        )
+    } else if (Holo.kioskMode && taps in 1..3) {
         androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.fillMaxSize(), contentAlignment = androidx.compose.ui.Alignment.Center) {
             androidx.compose.material3.Text(
                 "Kiosk-Modus: noch ${4 - taps}× tippen zum Beenden",
