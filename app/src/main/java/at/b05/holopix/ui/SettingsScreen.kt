@@ -717,13 +717,20 @@ private fun WakeChecklist(vm: SettingsVm) {
         val overlayOk = remember(tick) { Settings.canDrawOverlays(ctx) }
         PermRow("Über anderen Apps einblenden (weckt das Display)", overlayOk) { open(Settings.ACTION_MANAGE_OVERLAY_PERMISSION) }
         OptionalPermRow("Benachrichtigungen – optional", notif) { open(Settings.ACTION_APPLICATION_DETAILS_SETTINGS) }
-        OptionalPermRow("Vollbild-Benachrichtigungen – optional, nur Rückfall (Android 14 setzt sie bei Updates zurück)", full) {
-            if (android.os.Build.VERSION.SDK_INT >= 34) open(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT)
+        val p = vm.prefs
+        val openFull = { if (android.os.Build.VERSION.SDK_INT >= 34) open(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT) }
+        when (p.wakeDirectWorks) {
+            // auf diesem Gerät nötig: als Pflicht (mit Warnzeichen) anzeigen
+            0 -> PermRow("Vollbild-Benachrichtigungen – auf diesem Gerät nötig (Android 14 setzt sie bei Updates zurück)", full) { openFull() }
+            1 -> OptionalPermRow("Vollbild-Benachrichtigungen – nicht nötig, direktes Einschalten klappt", full) { openFull() }
+            else -> OptionalPermRow("Vollbild-Benachrichtigungen – Rückfall; ob nötig, zeigt der Test unten", full) { openFull() }
         }
+        val last = remember(tick) { p.wakeLastResult }
+        if (last.isNotBlank()) Text("Letztes Einschalten: $last", color = if (p.wakeDirectWorks == 0 && !full) Z.Warn else Z.TextSoft, fontSize = 14.sp)
         OutlinedButton(onClick = {
             ds.scheduleTestWake(ctx)
             android.widget.Toast.makeText(ctx,
-                "Jetzt den Ein-/Aus-Knopf drücken – in 15 Sekunden schaltet HOLOPIX das Display wieder ein.", android.widget.Toast.LENGTH_LONG).show()
+                "Jetzt den Ein-/Aus-Knopf drücken – in 15 Sekunden schaltet HOLOPIX das Display wieder ein. Danach HOLOPIX öffnen: das Ergebnis steht hier.", android.widget.Toast.LENGTH_LONG).show()
         }) { Text("Testen: aus und nach 15 s wieder an") }
     }
 }

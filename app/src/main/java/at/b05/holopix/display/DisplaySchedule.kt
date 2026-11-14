@@ -186,6 +186,37 @@ object DisplaySchedule {
         } catch (e: Exception) { }
     }
 
+    /**
+     * Display einschalten und prüfen, ob es geklappt hat:
+     * 1. Bildschirmschoner direkt starten (erlaubt durch „Über anderen Apps einblenden“) – schaltet das Display ein.
+     * 2. Nach 3 s nachsehen. War das Display aus und ist es noch aus → Vollbild-Benachrichtigung als Rückfall.
+     * Das Ergebnis wird gespeichert; die Einstellungen markieren die Vollbild-Berechtigung dann als nötig.
+     */
+    fun wakeChecked(context: Context, pending: android.content.BroadcastReceiver.PendingResult, test: Boolean) {
+        val pm = context.getSystemService(PowerManager::class.java)
+        val wasOff = pm?.isInteractive == false
+        Holo.startScreensaver(context, wake = true)
+        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+            try {
+                val prefs = Holo.prefs
+                val time = LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("dd.MM. HH:mm"))
+                val what = if (test) "Test" else "Zeitplan"
+                if (!wasOff) {
+                    if (test) prefs.wakeLastResult = "$time · $what: Display war schon an – zum Testen nach dem Tippen den Ein-/Aus-Knopf drücken"
+                } else if (pm?.isInteractive == true) {
+                    prefs.wakeDirectWorks = 1
+                    prefs.wakeLastResult = "$time · $what: Display eingeschaltet ✓ (direkt, ohne Vollbild-Benachrichtigung)"
+                } else {
+                    prefs.wakeDirectWorks = 0
+                    wakeScreen(context) // Rückfall
+                    prefs.wakeLastResult = "$time · $what: direktes Einschalten klappt auf diesem Gerät nicht – " +
+                        if (fullScreenAllowed(context)) "Vollbild-Benachrichtigung verwendet" else "bitte „Vollbild-Benachrichtigungen“ erlauben"
+                }
+            } catch (e: Exception) { }
+            pending.finish()
+        }, 3000)
+    }
+
     fun cancelWakeNotification(context: Context) {
         try { context.getSystemService(android.app.NotificationManager::class.java).cancel(WAKE_NOTIFICATION_ID) } catch (e: Exception) { }
     }
@@ -215,15 +246,13 @@ class DisplayAlarmReceiver : BroadcastReceiver() {
         Holo.init(context.applicationContext as android.app.Application)
         val prefs = Holo.prefs
         if (DisplaySchedule.isTest(intent)) {
-            // direkt starten (dank „Über anderen Apps einblenden“ erlaubt) – die Activity schaltet das Display ein
-            Holo.startScreensaver(context, wake = true)
-            DisplaySchedule.wakeScreen(context)
+            DisplaySchedule.wakeChecked(context, goAsync(), test = true)
             return
         }
         if (prefs.displayScheduleEnabled) {
             if (DisplaySchedule.isOn(DisplaySchedule.fromJson(prefs.displayPlan), LocalDateTime.now())) {
                 Holo.onUserActivity()
-                if (Holo.photos.ready) Holo.startScreensaver(context, wake = true)
+                if (Holo.photos.ready) { DisplaySchedule.wakeChecked(context, goAsync(), test = false); DisplaySchedule.reschedule(context); return }
                 DisplaySchedule.wakeScreen(context)
             }
             // Ende eines Zeitraums: nichts erzwingen – der Bildschirmschoner gibt das Display frei

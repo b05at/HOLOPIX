@@ -83,6 +83,7 @@ class IdleService : Service() {
         })
         Holo.onUserActivity()
         handler.post(tick)
+        remindFullScreen()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -168,6 +169,26 @@ class IdleService : Service() {
     private fun isCharging(): Boolean {
         val bm = getSystemService(BatteryManager::class.java)
         return bm.isCharging
+    }
+
+    /** Direktes Einschalten klappt hier nicht und Android hat die Vollbild-Berechtigung (z. B. nach Update) entzogen → Hinweis. */
+    private fun remindFullScreen() {
+        val p = Holo.prefs
+        if (!p.displayScheduleEnabled || p.wakeDirectWorks != 0 || at.b05.holopix.display.DisplaySchedule.fullScreenAllowed(this)) return
+        try {
+            val nm = getSystemService(NotificationManager::class.java)
+            nm.createNotificationChannel(NotificationChannel("holopix_hint", "Hinweise", NotificationManager.IMPORTANCE_DEFAULT))
+            val i = if (Build.VERSION.SDK_INT >= 34)
+                Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT, android.net.Uri.parse("package:$packageName"))
+            else Intent(this, MainActivity::class.java)
+            val pi = PendingIntent.getActivity(this, 5, i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), PendingIntent.FLAG_IMMUTABLE)
+            nm.notify(3, NotificationCompat.Builder(this, "holopix_hint")
+                .setSmallIcon(R.drawable.ic_notification)
+                .setContentTitle("Vollbild-Benachrichtigungen erneut erlauben")
+                .setContentText("Android hat das Recht beim Update entzogen – nötig, damit der Zeitplan das Display einschaltet.")
+                .setStyle(NotificationCompat.BigTextStyle().bigText("Android hat das Recht beim Update entzogen. Auf diesem Gerät ist es nötig, damit der Display-Zeitplan das Display einschaltet. Antippen und für HOLOPIX erlauben."))
+                .setContentIntent(pi).setAutoCancel(true).build())
+        } catch (e: Exception) { }
     }
 
     // ---------- Overlay zur Berührungserkennung ----------
