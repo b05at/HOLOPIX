@@ -86,7 +86,10 @@ class IdleService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent?.action == ACTION_VISITOR) Holo.setVisitor(this, !Holo.prefs.visitorMode)
+        if (intent?.action == ACTION_VISITOR) {
+            // mit Kiosk-PIN lässt sich der Besuchermodus nur am Bildschirm (4× Tippen + PIN) beenden
+            if (!(Holo.prefs.visitorMode && Holo.kioskPinSet)) Holo.setVisitor(this, !Holo.prefs.visitorMode)
+        }
         if (!Holo.serviceNeeded()) { stopSelf(); return START_NOT_STICKY }
         goForeground()
         updateOverlay()
@@ -223,7 +226,7 @@ class IdleService : Service() {
             .setContentText(text)
             .setContentIntent(open)
             .addAction(0, "Jetzt starten", now)
-            .addAction(0, if (p.visitorMode) "Besuchermodus aus" else "Besuchermodus an", visitor)
+            .apply { if (!(p.visitorMode && Holo.kioskPinSet)) addAction(0, if (p.visitorMode) "Besuchermodus aus" else "Besuchermodus an", visitor) }
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_MIN)
             .build()

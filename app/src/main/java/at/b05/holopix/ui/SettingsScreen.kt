@@ -307,8 +307,8 @@ private fun VisitorSection(vm: SettingsVm) {
     Section("Besuchermodus") {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                if (vm.visitorMode) "An – Display und Bildschirmschoner bleiben an, der Zeitplan ist pausiert."
-                else "Aus – Display und Bildschirmschoner unbegrenzt an lassen, bis du ihn wieder ausschaltest. Danach greift wieder der Zeitplan.",
+                if (vm.visitorMode) "An – Display und Bildschirmschoner bleiben an, Kiosk-Modus aktiv, der Zeitplan ist pausiert."
+                else "Aus – Display und Bildschirmschoner unbegrenzt an lassen, mit Kiosk-Modus (Gäste können ihn nicht wegtippen). Beenden mit 4× Tippen (+ PIN), danach greift wieder der Zeitplan.",
                 Modifier.weight(1f), color = Z.Text, fontSize = 15.sp,
             )
             Switch(vm.visitorMode, { vm.toggleVisitor() })
@@ -344,6 +344,16 @@ private fun Permissions(vm: SettingsVm) {
     }
     if (android.os.Build.VERSION.SDK_INT >= 33) PermRow("Benachrichtigungen (Hinweis „HOLOPIX aktiv“, Updates)", notifOk) {
         notif.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+    }
+}
+
+/** Optionale Berechtigung: fehlt sie, wird das neutral (–) statt als Warnung angezeigt. */
+@Composable
+private fun OptionalPermRow(label: String, ok: Boolean, onFix: () -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(if (ok) "✓" else "–", color = if (ok) Z.Primary else Z.TextSoft, fontWeight = FontWeight.Bold, fontSize = 18.sp, modifier = Modifier.width(26.dp))
+        Text(label, Modifier.weight(1f), color = Z.Text, fontSize = 15.sp)
+        if (!ok) TextButton(onClick = onFix) { Text("Erlauben") }
     }
 }
 
@@ -702,8 +712,12 @@ private fun WakeChecklist(vm: SettingsVm) {
         PermRow("Exakte Wecker (pünktliches Ein-/Ausschalten)", exact) {
             if (android.os.Build.VERSION.SDK_INT >= 31) open(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM)
         }
-        PermRow("Benachrichtigungen (zum Einschalten nötig)", notif) { open(Settings.ACTION_APPLICATION_DETAILS_SETTINGS) }
-        PermRow("Vollbild-Benachrichtigungen (Android 14+)", full) {
+        // Mit „Über anderen Apps einblenden“ startet HOLOPIX den Bildschirmschoner direkt und weckt damit das Display.
+        // Vollbild-Benachrichtigungen sind dann nur noch ein Rückfall – Android 14 entzieht dieses Recht bei jedem Update.
+        val overlayOk = remember(tick) { Settings.canDrawOverlays(ctx) }
+        PermRow("Über anderen Apps einblenden (weckt das Display)", overlayOk) { open(Settings.ACTION_MANAGE_OVERLAY_PERMISSION) }
+        OptionalPermRow("Benachrichtigungen – optional", notif) { open(Settings.ACTION_APPLICATION_DETAILS_SETTINGS) }
+        OptionalPermRow("Vollbild-Benachrichtigungen – optional, nur Rückfall (Android 14 setzt sie bei Updates zurück)", full) {
             if (android.os.Build.VERSION.SDK_INT >= 34) open(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT)
         }
         OutlinedButton(onClick = {

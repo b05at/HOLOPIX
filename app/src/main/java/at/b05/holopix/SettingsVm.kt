@@ -46,8 +46,9 @@ class SettingsVm(app: Application) : AndroidViewModel(app) {
 
     val visitorMode get() = Holo.visitorMode
     fun toggleVisitor() {
+        if (Holo.visitorMode && Holo.kioskMode && Holo.kioskPinSet) { pinFlow = "off"; return }
         Holo.setVisitor(ctx, !Holo.visitorMode)
-        message = if (Holo.visitorMode) "Besuchermodus an – Display und Bildschirmschoner bleiben an, bis du ihn ausschaltest"
+        message = if (Holo.visitorMode) "Besuchermodus an – Display bleibt an, Kiosk-Modus aktiv (Beenden: 4× tippen" + (if (Holo.kioskPinSet) " + PIN" else "") + ")"
         else "Besuchermodus aus – Display-Zeitplan gilt wieder"
     }
 

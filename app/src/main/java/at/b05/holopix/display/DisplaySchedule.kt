@@ -152,6 +152,9 @@ object DisplaySchedule {
             ).acquire(10_000)
         } catch (e: Exception) { }
         if (pm.isInteractive) return // Display ist schon an
+        // Rückfall, falls das Display nicht schon durch den direkten Start des Bildschirmschoners angeht:
+        // Vollbild-Benachrichtigung – nur wenn erlaubt (Android 14 entzieht das Recht bei jedem App-Update)
+        if (!fullScreenAllowed(context)) return
         try {
             val nm = context.getSystemService(android.app.NotificationManager::class.java)
             if (nm.getNotificationChannel(WAKE_CHANNEL) == null) {
@@ -212,15 +215,16 @@ class DisplayAlarmReceiver : BroadcastReceiver() {
         Holo.init(context.applicationContext as android.app.Application)
         val prefs = Holo.prefs
         if (DisplaySchedule.isTest(intent)) {
-            DisplaySchedule.wakeScreen(context)
+            // direkt starten (dank „Über anderen Apps einblenden“ erlaubt) – die Activity schaltet das Display ein
             Holo.startScreensaver(context, wake = true)
+            DisplaySchedule.wakeScreen(context)
             return
         }
         if (prefs.displayScheduleEnabled) {
             if (DisplaySchedule.isOn(DisplaySchedule.fromJson(prefs.displayPlan), LocalDateTime.now())) {
                 Holo.onUserActivity()
-                DisplaySchedule.wakeScreen(context)
                 if (Holo.photos.ready) Holo.startScreensaver(context, wake = true)
+                DisplaySchedule.wakeScreen(context)
             }
             // Ende eines Zeitraums: nichts erzwingen – der Bildschirmschoner gibt das Display frei
             // und Android schaltet es nach dem eingestellten Zeitlimit aus.

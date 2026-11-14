@@ -96,10 +96,13 @@ object Holo {
     var visitorMode by mutableStateOf(false)
         private set
 
+    /** Besuchermodus schaltet den Kiosk-Modus mit ein und aus (Gäste können den Bildschirmschoner nicht wegtippen). */
     fun setVisitor(c: Context, on: Boolean) {
         visitorMode = on; prefs.visitorMode = on
+        kioskMode = on; prefs.kioskMode = on
         onUserActivity()
         IdleService.refresh(c)
+        if (on && photos.ready) startScreensaver(c)
     }
 
     /**
@@ -111,6 +114,8 @@ object Holo {
 
     fun setKiosk(c: Context, on: Boolean) {
         kioskMode = on; prefs.kioskMode = on
+        // Kiosk beenden (4× Tippen/PIN) beendet auch den Besuchermodus – danach gilt wieder der Zeitplan
+        if (!on && visitorMode) { visitorMode = false; prefs.visitorMode = false }
         onUserActivity()
         IdleService.refresh(c)
         if (on && photos.ready) {
