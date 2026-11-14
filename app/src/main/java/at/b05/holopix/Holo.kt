@@ -141,7 +141,7 @@ object Holo {
     }
 
     /** Hintergrunddienst nötig: automatischer Bildschirmschoner, Zeitplan, Besucher- oder Kiosk-Modus. */
-    fun serviceNeeded(): Boolean = prefs.enabled || prefs.displayScheduleEnabled || prefs.visitorMode || prefs.kioskMode
+    fun serviceNeeded(): Boolean = prefs.enabled || prefs.displayScheduleEnabled || prefs.visitorMode || prefs.kioskMode || prefs.mqttEnabled
 
     /** Laut Zeitplan (oder Besuchermodus) soll das Display jetzt an sein. */
     fun scheduleOn(): Boolean = prefs.visitorMode || !prefs.displayScheduleEnabled ||

@@ -80,6 +80,19 @@ class Prefs(context: Context) {
     var weatherLat by S("w_lat", "47.5034")
     var weatherLon by S("w_lon", "16.5034")
 
+    // MQTT (Akkustand)
+    var mqttEnabled by B("mqtt_on", false)
+    var mqttHost by S("mqtt_host")
+    var mqttPort by I("mqtt_port", 1883)
+    var mqttUser by S("mqtt_user")
+    var mqttPassword by S("mqtt_pw")
+    /** Basis-Thema, leer = holopix/<Geräte-ID>. */
+    var mqttTopic by S("mqtt_topic")
+    var mqttDeviceName by S("mqtt_name")
+    var mqttIntervalMinutes by I("mqtt_interval", 30)
+    var mqttDiscovery by B("mqtt_discovery", true)
+    var mqttLastResult by S("mqtt_last")
+
     // Darstellung & Updates
     var themeMode by S("theme", "system")
     var autoUpdate by B("auto_update", true)
