@@ -49,8 +49,10 @@ class LocalPhotoSource(private val context: android.content.Context, private val
             val out = ArrayList<Photo>()
             var lastReport = 0
             var errors = 0
+            val skip = prefs.excludedFolders
             fun walk(tree: android.net.Uri, docId: String, dirName: String, depth: Int) {
                 if (depth > maxDepth || out.size >= maxFiles) return
+                if (skip.isNotEmpty() && Folders.isExcluded(Folders.localKey(docId), skip)) return
                 val children = android.provider.DocumentsContract.buildChildDocumentsUriUsingTree(tree, docId)
                 val dirs = ArrayList<Pair<String, String>>()
                 val folder = "local/" + docId + "/" + java.net.URLEncoder.encode(dirName, "UTF-8")

@@ -30,6 +30,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
@@ -74,9 +76,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import at.b05.holopix.BuildConfig
 import at.b05.holopix.SettingsVm
+import at.b05.holopix.data.Folders
 import at.b05.holopix.data.LocalPhotoSource
 import at.b05.holopix.data.SmbSource
 import at.b05.holopix.data.SmbStep
+import at.b05.holopix.screensaver.ScreenProfile
+import at.b05.holopix.screensaver.of
 import at.b05.holopix.screensaver.weatherLine
 import kotlinx.coroutines.delay
 
@@ -135,17 +140,28 @@ fun SettingsScreen(vm: SettingsVm) {
                 DisplayScheduleSection(vm)
                 LocalFolderSection(vm)
                 SmbSection(vm)
+                ExcludeSection(vm)
                 Section("Ablauf") {
                     var seconds by remember { mutableIntStateOf(p.collageSeconds) }
                     Stepper("Bildwechsel alle $seconds s",
                         onMinus = { seconds = (seconds - 5).coerceAtLeast(5); p.collageSeconds = seconds },
                         onPlus = { seconds += 5; p.collageSeconds = seconds })
                     val ctx = LocalContext.current
-                    val scr = remember { at.b05.holopix.screensaver.ScreenProfile.of(ctx) }
+                    val scr = remember { ScreenProfile.of(ctx) }
+                    // Fotos je Collage: automatisch nach Bildschirmgröße oder selbst begrenzen (1 = immer nur ein Foto)
+                    var maxPhotos by remember { mutableIntStateOf(p.collageMaxPhotos) }
+                    val shownMax = if (maxPhotos in 1 until scr.maxPhotos) maxPhotos else scr.maxPhotos
+                    Stepper(
+                        if (maxPhotos in 1 until scr.maxPhotos) (if (shownMax == 1) "Immer nur 1 Foto" else "Höchstens $shownMax Fotos je Collage")
+                        else "Bis zu ${scr.maxPhotos} Fotos je Collage (automatisch)",
+                        onMinus = { maxPhotos = (shownMax - 1).coerceAtLeast(1); p.collageMaxPhotos = maxPhotos },
+                        onPlus = { maxPhotos = if (shownMax + 1 >= scr.maxPhotos) 0 else shownMax + 1; p.collageMaxPhotos = maxPhotos },
+                    )
                     Hint("Smarte Collage passend zu diesem Bildschirm (${scr.widthPx}×${scr.heightPx} px, ${scr.widthDp.toInt()}×${scr.heightDp.toInt()} dp): " +
-                        "bis zu ${scr.maxPhotos} Fotos aus demselben Ordner, keine Kachel kleiner als ${scr.minTileDp.toInt()} dp, möglichst wenig Beschnitt, " +
-                        "ausgewogene Größen und jedes Mal eine andere Anordnung. Beim Drehen wird sofort neu angeordnet. Serienbilder kommen nicht " +
-                        "nebeneinander, Gesichter bleiben beim Zuschneiden im Bild. Passt kein Foto, wird es ganz mit unscharfem Hintergrund gezeigt.")
+                        "Fotos aus demselben Ordner, mal ein großes Einzelfoto, mal mehrere – die Anordnung wechselt jedes Mal, und kein Ordner " +
+                        "kommt zweimal hintereinander. Gesichter werden erkannt: Die Anordnung wird so gewählt, dass niemand abgeschnitten wird, " +
+                        "Ausschnitt und Zoom liegen auf den Gesichtern. Keine Kachel kleiner als ${scr.minTileDp.toInt()} dp, Serienbilder kommen " +
+                        "nicht nebeneinander. Passt ein Foto gar nicht, wird es ganz mit unscharfem Rand gezeigt.")
                 }
                 OverlaySection(vm)
                 WeatherSection(vm)
@@ -376,7 +392,108 @@ private fun LocalFolderSection(vm: SettingsVm) {
                 OutlinedButton(onClick = { vm.scan() }, enabled = !vm.scanning) { Text(if (vm.scanning) "Suche Fotos …" else "Fotos einlesen") }
             }
         }
-        vm.photoCount?.let { Text("$it Fotos gesamt", color = Z.TextSoft) }
+        vm.photoCount?.let {
+            Text("$it Fotos werden gezeigt" + (if (vm.excludedPhotos > 0) " · ${vm.excludedPhotos} ausgeschlossen" else ""), color = Z.TextSoft)
+        }
+    }
+}
+
+/** Ordner von der Anzeige ausnehmen – für Ordner am Gerät und im Netzwerk gleichermaßen. */
+@Composable
+private fun ExcludeSection(vm: SettingsVm) {
+    Section("Fotoquelle · Ordner ausschließen") {
+        Hint("Einzelne Ordner (mit allen Unterordnern) von der Anzeige ausnehmen – am Gerät genauso wie auf der SMB-Freigabe, " +
+            "z. B. Screenshots, Dokumente oder private Alben. Ausgeschlossene Ordner werden auch nicht mehr durchsucht.")
+        if (vm.excludedFolders.isEmpty()) {
+            Text("Kein Ordner ausgeschlossen – alle Fotos der Quellen werden gezeigt.", color = Z.Text, fontSize = 15.sp)
+        } else {
+            vm.excludedFolders.sortedBy { it.lowercase() }.forEach { key ->
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text((if (Folders.isLocal(key)) "📱  " else "🖧  ") + Folders.label(key), modifier = Modifier.weight(1f), color = Z.Text)
+                    TextButton(onClick = { vm.setFolderShown(key, true) }) { Text("Wieder zeigen") }
+                }
+            }
+            if (vm.excludedPhotos > 0) Text("${vm.excludedPhotos} eingelesene Fotos werden dadurch nicht gezeigt.", color = Z.TextSoft, fontSize = 14.sp)
+        }
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = { vm.openFolderPicker() }) { Text("Ordner auswählen") }
+        }
+    }
+    if (vm.folderPickerOpen) FolderPicker(vm)
+}
+
+/** Vollbild-Liste aller Ordner beider Quellen: Haken = wird gezeigt, Haken raus = ausgeschlossen (samt Unterordnern). */
+@Composable
+private fun FolderPicker(vm: SettingsVm) {
+    androidx.compose.ui.window.Dialog(
+        onDismissRequest = { vm.closeFolderPicker() },
+        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+        var query by remember { mutableStateOf("") }
+        val rows = vm.folderRows
+        val excluded = vm.excludedFolders
+        Column(
+            Modifier.fillMaxSize().background(Z.Bg).windowInsetsPadding(WindowInsets.safeDrawing).imePadding().padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Welche Ordner sollen gezeigt werden?", fontSize = 21.sp, fontWeight = FontWeight.SemiBold, color = Z.Text)
+                    Text("Haken entfernen = Ordner samt Unterordnern nicht zeigen", fontSize = 14.sp, color = Z.TextSoft)
+                }
+                Button(onClick = { vm.closeFolderPicker() }) { Text("Fertig") }
+            }
+            OutlinedTextField(query, { query = it }, label = { Text("Ordner suchen") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            when {
+                rows == null -> Text("Lade Ordnerliste …", color = Z.TextSoft)
+                rows.isEmpty() -> {
+                    Text("Noch keine Ordner bekannt. Zuerst eine Fotoquelle einrichten und die Fotos einlesen.", color = Z.Text)
+                    OutlinedButton(onClick = { vm.closeFolderPicker(); vm.scan() }, enabled = !vm.scanning) { Text("Fotos einlesen") }
+                }
+                else -> {
+                    val q = query.trim()
+                    val list = if (q.isEmpty()) rows else rows.filter { it.path.contains(q, ignoreCase = true) }
+                    if (list.isEmpty()) Text("Kein Ordner passt zu „$q“.", color = Z.TextSoft)
+                    LazyColumn(Modifier.weight(1f).fillMaxWidth().background(Z.Card, RoundedCornerShape(16.dp)).padding(vertical = 6.dp)) {
+                        items(list, key = { it.key }) { r ->
+                            val self = r.key in excluded
+                            val viaParent = !self && excluded.any { r.key.startsWith(it) }
+                            Row(
+                                Modifier.fillMaxWidth()
+                                    .clickable(enabled = !viaParent) { vm.setFolderShown(r.key, self) }
+                                    .padding(start = (8 + (if (q.isEmpty()) r.depth * 22 else 0)).dp, end = 14.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Checkbox(checked = !self && !viaParent, onCheckedChange = { vm.setFolderShown(r.key, it) }, enabled = !viaParent)
+                                Column(Modifier.weight(1f)) {
+                                    Text(
+                                        if (q.isEmpty()) r.name else r.path,
+                                        color = if (self || viaParent) Z.TextSoft else Z.Text,
+                                        fontWeight = if (r.depth == 0 && q.isEmpty()) FontWeight.SemiBold else FontWeight.Normal,
+                                        fontSize = 16.sp,
+                                    )
+                                    val note = when {
+                                        self -> "ausgeschlossen"
+                                        viaParent -> "über den Oberordner ausgeschlossen"
+                                        r.depth == 0 -> if (r.local) "Ordner am Gerät" else "Netzwerk (SMB)"
+                                        else -> null
+                                    }
+                                    if (note != null) Text(note, color = if (self) Z.Warn else Z.TextSoft, fontSize = 12.sp)
+                                }
+                                Text(
+                                    when {
+                                        r.total > 0 -> "${r.total} Fotos"
+                                        self || viaParent -> "nicht eingelesen"
+                                        else -> "–"
+                                    },
+                                    color = Z.TextSoft, fontSize = 13.sp,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 

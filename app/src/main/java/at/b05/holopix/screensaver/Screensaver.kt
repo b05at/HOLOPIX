@@ -172,14 +172,15 @@ private fun InfoBlock(lines: List<Pair<ImageVector, String>>, scale: Float, hAli
 @Composable
 private fun CollageView(slide: Slide) {
     BoxWithConstraints(Modifier.fillMaxSize().padding(4.dp)) {
-        val screenAspect = maxWidth.value / maxHeight.value
-        // Passt die Collage nicht gut (z. B. nur ein einzelnes Hochformatfoto), statt Beschnitt
-        // das ganze Foto zeigen – mit weichgezeichnetem Hintergrund statt schwarzer Ränder.
-        val mismatch = kotlin.math.abs(kotlin.math.ln(slide.root.aspect / screenAspect))
+        val screenAspect = (maxWidth.value / maxHeight.value).toDouble()
+        // Passt die Collage nicht gut (z. B. nur ein einzelnes Hochformatfoto) oder würde der Zuschnitt
+        // Gesichter kosten, statt Beschnitt das ganze Foto zeigen – mit weichgezeichnetem Hintergrund
+        // statt schwarzer Ränder.
+        val fit = slide.fit || CollageLayout.usesFit(slide.root, screenAspect)
         var counter = 0
         val order = HashMap<String, Int>()
         slide.root.leaves.forEach { order[it.photo.url] = counter++ }
-        NodeView(slide.root, slide.images, order, Modifier.fillMaxSize(), fit = mismatch > 0.25)
+        NodeView(slide.root, slide.images, order, Modifier.fillMaxSize(), fit = fit)
     }
 }
 
@@ -219,9 +220,21 @@ private fun Tile(photo: LoadedPhoto, modifier: Modifier, fit: Boolean, index: In
         delay(index * 220L)
         alpha.animateTo(1f, tween(700))
     }
-    LaunchedEffect(photo) { zoom.animateTo(1.10f, tween(20000, easing = LinearEasing)) }
-    val bias = BiasAlignment(photo.focusX * 2f - 1f, photo.focusY * 2f - 1f)
-    Box(modifier.clip(RoundedCornerShape(8.dp)).graphicsLayer { this.alpha = alpha.value }) {
+    LaunchedEffect(photo) { zoom.animateTo(CollageLayout.ZOOM.toFloat(), tween(20000, easing = LinearEasing)) }
+    BoxWithConstraints(modifier.clip(RoundedCornerShape(8.dp)).graphicsLayer { this.alpha = alpha.value }) {
+        // Ausschnitt so legen, dass der wichtigste Bereich (Gesichter) mittig in der Kachel liegt –
+        // dieselbe Rechnung wie bei der Bewertung der Anordnung (CollageLayout.faceCut).
+        val tileAspect = constraints.maxWidth.toDouble() / constraints.maxHeight.coerceAtLeast(1)
+        val (vw, vh) = CollageLayout.visible(photo.aspect.toDouble(), tileAspect) // sichtbarer Anteil von Breite/Höhe
+        val startX = (photo.focusX - vw / 2).coerceIn(0.0, 1.0 - vw)                // linker/oberer Rand des Ausschnitts
+        val startY = (photo.focusY - vh / 2).coerceIn(0.0, 1.0 - vh)
+        val bias = BiasAlignment(
+            if (vw < 0.999) (startX / (1.0 - vw) * 2 - 1).toFloat() else 0f,
+            if (vh < 0.999) (startY / (1.0 - vh) * 2 - 1).toFloat() else 0f,
+        )
+        // Zoom-Mittelpunkt = Stelle der Kachel, an der die Gesichter liegen (sonst wandern sie beim Zoomen aus dem Bild)
+        val originX = ((photo.focusX - startX) / vw).toFloat().coerceIn(0f, 1f)
+        val originY = ((photo.focusY - startY) / vh).toFloat().coerceIn(0f, 1f)
         if (blurred != null) {
             Image(
                 bitmap = blurred, contentDescription = null, contentScale = ContentScale.Crop,
@@ -237,8 +250,7 @@ private fun Tile(photo: LoadedPhoto, modifier: Modifier, fit: Boolean, index: In
             alignment = if (fit) Alignment.Center else bias,
             modifier = Modifier.fillMaxSize().graphicsLayer {
                 scaleX = zoom.value; scaleY = zoom.value
-                // Zoom auf den wichtigsten Bildbereich (Gesichter)
-                transformOrigin = TransformOrigin(photo.focusX, photo.focusY)
+                transformOrigin = if (fit) TransformOrigin.Center else TransformOrigin(originX, originY)
             },
         )
     }

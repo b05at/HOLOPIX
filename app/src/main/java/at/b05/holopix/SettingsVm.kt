@@ -8,6 +8,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import at.b05.holopix.data.Folders
 import at.b05.holopix.data.SmbSource
 import at.b05.holopix.data.SmbStep
 import at.b05.holopix.display.DayPlan
@@ -138,7 +139,68 @@ class SettingsVm(app: Application) : AndroidViewModel(app) {
     var smbTesting by mutableStateOf(false)
     var scanning by mutableStateOf(false)
 
-    fun onSourcesChanged() { Holo.collage.clear(); photoCount = null }
+    fun onSourcesChanged() { Holo.collage.clear(); photoCount = null; excludedPhotos = 0 }
+
+    // ---------- Ordner ausschließen ----------
+
+    /** Schlüssel der ausgeschlossenen Ordner (gilt jeweils auch für Unterordner). */
+    var excludedFolders by mutableStateOf(prefs.excludedFolders)
+        private set
+    /** Anzahl eingelesener Fotos, die wegen der Ausnahmen nicht gezeigt werden. */
+    var excludedPhotos by mutableStateOf(Holo.collage.excludedCount)
+        private set
+    var folderPickerOpen by mutableStateOf(false)
+        private set
+    /** Ordnerbaum für die Auswahl; null = wird gerade geladen. */
+    var folderRows by mutableStateOf<List<Folders.Row>?>(null)
+        private set
+    private var rescanAfterPicker = false
+
+    /** Schlüssel der eingerichteten Quellen (oberste Ebene des Ordnerbaums). */
+    private fun sourceRoots(): List<String> = buildList {
+        if (prefs.smbConfigured) add(Folders.key(SmbSource.parse(prefs.smbHost, prefs.smbShare, prefs.smbPath).url))
+        prefs.localFolders.forEach { f ->
+            try { add(Folders.localKey(android.provider.DocumentsContract.getTreeDocumentId(Uri.parse(f)))) } catch (e: Exception) { }
+        }
+    }
+
+    private fun updateCounts() {
+        photoCount = Holo.collage.photoCount.takeIf { it > 0 || Holo.collage.indexLoaded }
+        excludedPhotos = Holo.collage.excludedCount
+    }
+
+    fun openFolderPicker() {
+        folderPickerOpen = true
+        folderRows = null
+        viewModelScope.launch {
+            folderRows = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+                // noch nichts im Speicher (App frisch gestartet) → gespeicherte Fotoliste verwenden
+                if (!Holo.collage.indexLoaded) Holo.collage.loadCache()
+                Folders.tree(Holo.collage.folderCounts(), prefs.excludedFolders, sourceRoots())
+            }
+            updateCounts()
+        }
+    }
+
+    /** Ordner (mit allen Unterordnern) zeigen oder ausschließen – wirkt sofort. */
+    fun setFolderShown(key: String, shown: Boolean) {
+        val cur = excludedFolders
+        // beim Ausschließen eines Oberordners werden Einträge seiner Unterordner überflüssig
+        excludedFolders = if (shown) cur - key else cur.filterNot { it.startsWith(key) } + key
+        prefs.excludedFolders = excludedFolders
+        // ein wieder gezeigter Ordner wurde evtl. gar nicht eingelesen → danach neu einlesen
+        if (shown) rescanAfterPicker = true
+        viewModelScope.launch {
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { Holo.collage.applyExclusions() }
+            updateCounts()
+            if (shown && !folderPickerOpen) { rescanAfterPicker = false; scan() }
+        }
+    }
+
+    fun closeFolderPicker() {
+        folderPickerOpen = false
+        if (rescanAfterPicker) { rescanAfterPicker = false; scan() }
+    }
 
     fun testSmb() {
         if (smbTesting) return
@@ -158,8 +220,9 @@ class SettingsVm(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             try {
                 Holo.collage.refresh { n -> photoCount = n }
-                photoCount = Holo.collage.photoCount
-                message = "${Holo.collage.photoCount} Fotos gefunden"
+                updateCounts()
+                message = "${Holo.collage.photoCount} Fotos gefunden" +
+                    (if (excludedFolders.isNotEmpty()) " (ohne ausgeschlossene Ordner)" else "")
             } catch (e: CancellationException) { throw e } catch (e: Exception) {
                 message = "Fotos: " + SmbSource.explain(e)
             } finally { scanning = false }

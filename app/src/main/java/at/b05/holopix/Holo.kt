@@ -48,7 +48,7 @@ object Holo {
         prefs = Prefs(a)
         smb = SmbSource(a, prefs)
         photos = MultiPhotoSource(smb, LocalPhotoSource(a, prefs, smb), prefs)
-        collage = CollageEngine(photos)
+        collage = CollageEngine(photos) { prefs.excludedFolders }
         visitorMode = prefs.visitorMode
         kioskMode = prefs.kioskMode
     }

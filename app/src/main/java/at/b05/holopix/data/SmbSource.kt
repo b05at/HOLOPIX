@@ -21,15 +21,16 @@ import java.net.InetSocketAddress
 import java.net.Socket
 import java.util.Properties
 
-/** Ein Foto auf der SMB-Freigabe. folder = übergeordneter Ordner (für "smarte" Gruppierung). */
-data class Photo(val url: String, val folder: String, val name: String)
-
-/** Ein geladenes Foto inkl. Seitenverhältnis (nach EXIF-Drehung). */
 /**
- * focusX/focusY (0..1) = wichtigster Bildbereich (Gesichter), damit beim Zuschneiden
+ * Ein geladenes Foto inkl. Seitenverhältnis (nach EXIF-Drehung).
+ * focusX/focusY (0..1) = wichtigster Bildbereich (Mitte der Gesichter), damit beim Zuschneiden
  * und beim Zoom niemand "abgeschnitten" wird. Ohne Gesichter leicht oberhalb der Mitte.
+ * faces = Bereich aller erkannten Gesichter – damit wählt die Collage eine Kachel, in die sie ganz passen.
  */
-data class LoadedPhoto(val photo: Photo, val bitmap: Bitmap, val focusX: Float = 0.5f, val focusY: Float = 0.42f) {
+data class LoadedPhoto(
+    val photo: Photo, val bitmap: Bitmap,
+    val focusX: Float = 0.5f, val focusY: Float = 0.42f, val faces: FaceBox? = null,
+) {
     val aspect: Float get() = bitmap.width.toFloat() / bitmap.height.coerceAtLeast(1)
 }
 
@@ -171,8 +172,11 @@ class SmbSource(private val context: Context, private val prefs: Prefs) : PhotoS
         val ctx = context()
         val out = ArrayList<Photo>()
         var lastReport = 0
+        // ausgeschlossene Ordner gar nicht erst durchsuchen: schneller, und die Obergrenze bleibt für gewünschte Ordner
+        val skip = prefs.excludedFolders
         fun walk(url: String, depth: Int) {
             if (depth > maxDepth || out.size >= maxFiles) return
+            if (skip.isNotEmpty() && Folders.isExcluded(Folders.key(url), skip)) return
             val dir = SmbFile(url, ctx)
             val children = try { serial { dir.listFiles() } } catch (e: Exception) { if (depth == 0) throw e else emptyArray() }
             // erst Dateien dieses Ordners, dann Unterordner → schneller erste Treffer
@@ -294,26 +298,32 @@ class SmbSource(private val context: Context, private val prefs: Prefs) : PhotoS
             if (n < out.size) out.copyOf(n) else out
         }
 
-    /** Gesichtserkennung (Android-intern, offline) auf einer kleinen Kopie → Schwerpunkt der Gesichter. */
-    private fun faceFocus(bmp: Bitmap): Pair<Float, Float>? = try {
-        val w = 320
+    /**
+     * Gesichtserkennung (Android-intern, offline) auf einer kleinen Kopie → Bereich aller Gesichter.
+     * Aus Augenmitte und Augenabstand d wird je Gesicht ein Rahmen geschätzt (ca. 2,2 d breit, 3 d hoch:
+     * Stirn bis Kinn); zurück kommt der gemeinsame Rahmen aller Gesichter.
+     */
+    private fun findFaces(bmp: Bitmap): FaceBox? = try {
+        val w = 448
         val h = ((bmp.height * w) / bmp.width.toFloat()).toInt().let { it - it % 2 }.coerceAtLeast(2)
         var small = Bitmap.createScaledBitmap(bmp, w, h, true)
         if (small.config != Bitmap.Config.RGB_565) small = small.copy(Bitmap.Config.RGB_565, false)
         val faces = arrayOfNulls<android.media.FaceDetector.Face>(8)
         val n = android.media.FaceDetector(small.width, small.height, faces.size).findFaces(small, faces)
-        var sx = 0f; var sy = 0f; var sw = 0f
+        var l = Float.MAX_VALUE; var t = Float.MAX_VALUE; var r = -Float.MAX_VALUE; var b = -Float.MAX_VALUE
         val p = android.graphics.PointF()
         for (i in 0 until n) {
             val f = faces[i] ?: continue
             if (f.confidence() < 0.4f) continue
             f.getMidPoint(p)
-            val wt = f.eyesDistance()
-            sx += p.x * wt; sy += (p.y + wt * 0.6f) * wt; sw += wt // Augenmitte → Gesichtsmitte
+            val d = f.eyesDistance()
+            l = minOf(l, p.x - 1.1f * d); r = maxOf(r, p.x + 1.1f * d)
+            t = minOf(t, p.y - 1.1f * d); b = maxOf(b, p.y + 1.9f * d)
         }
-        val res = if (sw == 0f) null else (sx / sw / small.width).coerceIn(0f, 1f) to (sy / sw / small.height).coerceIn(0f, 1f)
+        val sw = small.width.toFloat(); val sh = small.height.toFloat()
         if (small != bmp) small.recycle()
-        res
+        if (r < l) null
+        else FaceBox((l / sw).coerceIn(0f, 1f), (t / sh).coerceIn(0f, 1f), (r / sw).coerceIn(0f, 1f), (b / sh).coerceIn(0f, 1f))
     } catch (e: Throwable) {
         null
     }
@@ -347,8 +357,8 @@ class SmbSource(private val context: Context, private val prefs: Prefs) : PhotoS
             if (rotated != bmp) bmp.recycle()
             bmp = rotated
         }
-        val focus = faceFocus(bmp)
-        return LoadedPhoto(photo, bmp, focus?.first ?: 0.5f, focus?.second ?: 0.42f)
+        val faces = findFaces(bmp)
+        return LoadedPhoto(photo, bmp, faces?.cx ?: 0.5f, faces?.cy ?: 0.42f, faces)
     }
 
     // ---------- Verbindungstest ----------

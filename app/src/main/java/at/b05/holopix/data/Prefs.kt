@@ -63,8 +63,18 @@ class Prefs(context: Context) {
         get() = try { JSONArray(sp.getString("local_dirs", "[]")).let { a -> (0 until a.length()).map { a.getString(it) } } } catch (e: Exception) { emptyList() }
         set(v) { sp.edit().putString("local_dirs", JSONArray(v).toString()).apply() }
 
+    /**
+     * Ordner, die nicht gezeigt werden (Schlüssel siehe [Folders]) – gilt jeweils auch für alle Unterordner,
+     * für Ordner am Gerät genauso wie für Netzwerkordner.
+     */
+    var excludedFolders: List<String>
+        get() = try { JSONArray(sp.getString("excluded_dirs", "[]")).let { a -> (0 until a.length()).map { a.getString(it) } } } catch (e: Exception) { emptyList() }
+        set(v) { sp.edit().putString("excluded_dirs", JSONArray(v).toString()).apply() }
+
     // Ablauf & Overlay
     var collageSeconds by I("ss_seconds", 15)
+    /** Höchstens so viele Fotos je Collage; 0 = automatisch nach Bildschirmgröße. */
+    var collageMaxPhotos by I("ss_max_photos", 0)
     var ssShowClock by B("ss_clock", true)
     var ssShowDate by B("ss_date", true)
     var ssShowWeather by B("ss_weather", false)

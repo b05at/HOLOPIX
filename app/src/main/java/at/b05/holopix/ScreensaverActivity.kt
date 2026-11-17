@@ -13,7 +13,9 @@ import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.lifecycleScope
 import at.b05.holopix.screensaver.OverlayStyle
 import at.b05.holopix.screensaver.ScreensaverView
+import at.b05.holopix.screensaver.ScreenProfile
 import at.b05.holopix.screensaver.SlideShow
+import at.b05.holopix.screensaver.of
 import at.b05.holopix.screensaver.ScreensaverContent
 import at.b05.holopix.screensaver.weatherLine
 import kotlinx.coroutines.Job
@@ -65,7 +67,7 @@ class ScreensaverActivity : ComponentActivity() {
         super.onStart()
         Holo.screensaverShowing = true
         Holo.screensaverFinisher = { runOnUiThread { if (!isFinishing) finish() } }
-        show.screen = { at.b05.holopix.screensaver.ScreenProfile.of(this) }
+        show.screen = { ScreenProfile.of(this) }
         show.start()
         widgetJob = lifecycleScope.launch {
             while (isActive) {

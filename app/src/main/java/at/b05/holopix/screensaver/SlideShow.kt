@@ -65,7 +65,7 @@ class SlideShow(private val scope: CoroutineScope) {
                 val progress: (String) -> Unit = { p -> if (slide == null) status = "Lade Fotos …\n$p" }
                 // erstes Bild schnell (höchstens 2 Fotos), danach volle Collagen
                 var forScreen = screen()
-                var pending = next { collage.nextSlide(forScreen, maxPhotos = 2, onProgress = progress) }
+                var pending = next { collage.nextSlide(forScreen, maxPhotos = minOf(2, limit(forScreen)), onProgress = progress) }
                 while (isActive) {
                     val n = withTimeoutOrNull(120_000) { pending.await() }
                     if (n == null && pending.isActive) {
@@ -74,7 +74,7 @@ class SlideShow(private val scope: CoroutineScope) {
                     }
                     forScreen = screen()
                     val target = forScreen
-                    pending = next { collage.nextSlide(target, onProgress = progress) }
+                    pending = next { collage.nextSlide(target, maxPhotos = limit(target), onProgress = progress) }
                     if (n != null) {
                         slide = n; failures = 0; status = null
                         // warten – wird der Bildschirm gedreht, sofort eine passende neue Collage bauen
@@ -85,7 +85,7 @@ class SlideShow(private val scope: CoroutineScope) {
                             if (kotlin.math.abs(now.aspect - target.aspect) > 0.05) {
                                 pending.cancel()
                                 forScreen = now
-                                pending = next { collage.nextSlide(now, maxPhotos = 2, onProgress = progress) }
+                                pending = next { collage.nextSlide(now, maxPhotos = minOf(2, limit(now)), onProgress = progress) }
                                 break
                             }
                         }
@@ -98,7 +98,7 @@ class SlideShow(private val scope: CoroutineScope) {
                             pending.cancel()
                             forScreen = screen()
                             val s2 = forScreen
-                            pending = next { collage.nextSlide(s2, maxPhotos = 2, onProgress = progress) }
+                            pending = next { collage.nextSlide(s2, maxPhotos = minOf(2, limit(s2)), onProgress = progress) }
                         }
                     }
                 }
@@ -109,6 +109,10 @@ class SlideShow(private val scope: CoroutineScope) {
             }
         }
     }
+
+    /** Höchstens so viele Fotos je Collage: Einstellung (0 = automatisch), nie mehr als der Bildschirm sinnvoll zeigt. */
+    private fun limit(s: ScreenProfile): Int =
+        prefs.collageMaxPhotos.takeIf { it > 0 }?.coerceAtMost(s.maxPhotos) ?: s.maxPhotos
 
     /** Nächste Collage im Hintergrund – ein Fehler darin darf die App nicht beenden. */
     private fun CoroutineScope.next(block: suspend () -> Slide?) = async {
