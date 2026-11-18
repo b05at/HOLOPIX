@@ -102,6 +102,26 @@ object Holo {
         } catch (e: Exception) { }
     }
 
+    @Volatile private var startPendingUntil = 0L
+
+    /**
+     * Start nach Leerlauf / im Kiosk-Modus: zuerst die Bildschirmschoner-Seite – nur sie kann die
+     * Navigationsleiste ausblenden. Blockiert Android den Start aus dem Hintergrund, erscheint nach
+     * 1,5 s das Vollbild-Overlay als Rückfall (dort bleibt die Navigationsleiste sichtbar).
+     */
+    fun startIdleScreensaver(c: Context) {
+        val now = System.currentTimeMillis()
+        if (screensaverShowing || now < startPendingUntil) return
+        startPendingUntil = now + 2500
+        startScreensaver(c)
+        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+            if (!screensaverShowing) {
+                lastStartError = "Seite blockiert – Overlay verwendet (Navigationsleiste bleibt sichtbar)"
+                if (!overlay.show()) lastStartError = "Bildschirmschoner konnte nicht starten"
+            } else if (activityShowing) lastStartError = null
+        }, 1500)
+    }
+
     /** Von der sichtbaren Bildschirmschoner-Seite gesetzt, damit Zeitplan/Dienst sie beenden können. */
     @Volatile var activityFinisher: (() -> Unit)? = null
     /** Beendet jeden sichtbaren Bildschirmschoner (Overlay und Seite). */

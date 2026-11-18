@@ -38,10 +38,7 @@ class ScreensaverActivity : ComponentActivity() {
         if (Holo.scheduleOn()) window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         applyWake(intent)
         WindowCompat.setDecorFitsSystemWindows(window, false)
-        WindowCompat.getInsetsController(window, window.decorView).apply {
-            systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-            hide(WindowInsetsCompat.Type.systemBars())
-        }
+        hideBars()
         show = SlideShow(lifecycleScope)
         setContent {
             ScreensaverContent(show, onTick = {
@@ -50,6 +47,25 @@ class ScreensaverActivity : ComponentActivity() {
                 else window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
             }, onDismiss = { finishScreensaver() })
         }
+    }
+
+    /** Status- und Navigationsleiste ausblenden (Wischen vom Rand holt sie kurz zurück). */
+    private fun hideBars() {
+        WindowCompat.getInsetsController(window, window.decorView).apply {
+            systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            hide(WindowInsetsCompat.Type.systemBars())
+        }
+    }
+
+    // Manche Geräte zeigen die Leisten nach Fokuswechsel (Benachrichtigung, Sperrbildschirm) wieder an → erneut ausblenden
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) hideBars()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        hideBars()
     }
 
     override fun onNewIntent(intent: android.content.Intent) {

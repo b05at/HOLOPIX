@@ -132,7 +132,7 @@ class IdleService : Service() {
         if (!pm.isInteractive) { status("${kiosk}Display ist aus"); return }
         if (p.kioskMode) {
             // Kiosk: sofort (ohne Leerlaufzeit) wieder anzeigen
-            if (!Holo.overlay.show()) Holo.startScreensaver(this)
+            Holo.startIdleScreensaver(this)
             return
         }
         if (idle < need) {
@@ -144,8 +144,8 @@ class IdleService : Service() {
         }
         if (!p.visitorMode && p.onlyWhileCharging && !isCharging()) { status("Wartet: Gerät lädt nicht (Option „Nur beim Laden“)"); return }
         Holo.onUserActivity() // nicht sofort erneut auslösen, falls der Start scheitert
-        // Vollbild-Overlay: kann Android nicht als Hintergrundstart blockieren; Rückfall: Activity
-        if (!Holo.overlay.show()) Holo.startScreensaver(this)
+        // Bildschirmschoner-Seite (blendet Leisten aus); blockiert Android sie, Overlay als Rückfall
+        Holo.startIdleScreensaver(this)
     }
 
 
