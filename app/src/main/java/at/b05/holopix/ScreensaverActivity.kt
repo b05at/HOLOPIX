@@ -65,8 +65,10 @@ class ScreensaverActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
-        Holo.screensaverShowing = true
-        Holo.screensaverFinisher = { runOnUiThread { if (!isFinishing) finish() } }
+        Holo.activityShowing = true
+        Holo.activityFinisher = { runOnUiThread { if (!isFinishing) finish() } }
+        // Overlay noch sichtbar (z. B. Wecken im Kiosk-Modus) → ausblenden, sonst liegen zwei Schichten übereinander
+        if (Holo.overlayShowing) Holo.overlay.hide()
         show.screen = { ScreenProfile.of(this) }
         show.start()
         widgetJob = lifecycleScope.launch {
@@ -81,8 +83,8 @@ class ScreensaverActivity : ComponentActivity() {
         super.onStop()
         widgetJob?.cancel()
         show.stop()
-        Holo.screensaverShowing = false
-        Holo.screensaverFinisher = null
+        Holo.activityShowing = false
+        Holo.activityFinisher = null
         Holo.onUserActivity()
         // nicht im Hintergrund liegen lassen – beim nächsten Leerlauf neu starten
         if (!isChangingConfigurations) finish()

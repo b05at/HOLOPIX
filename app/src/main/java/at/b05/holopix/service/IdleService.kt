@@ -101,7 +101,7 @@ class IdleService : Service() {
         handler.removeCallbacksAndMessages(null)
         try { unregisterReceiver(screenReceiver) } catch (e: Exception) { }
         removeOverlay()
-        overlayShow.hide()
+        Holo.overlay.hide()
         updateWakeLock(false)
         Holo.serviceStatus = null
         super.onDestroy()
@@ -132,7 +132,7 @@ class IdleService : Service() {
         if (!pm.isInteractive) { status("${kiosk}Display ist aus"); return }
         if (p.kioskMode) {
             // Kiosk: sofort (ohne Leerlaufzeit) wieder anzeigen
-            if (!overlayShow.show()) Holo.startScreensaver(this)
+            if (!Holo.overlay.show()) Holo.startScreensaver(this)
             return
         }
         if (idle < need) {
@@ -145,10 +145,9 @@ class IdleService : Service() {
         if (!p.visitorMode && p.onlyWhileCharging && !isCharging()) { status("Wartet: Gerät lädt nicht (Option „Nur beim Laden“)"); return }
         Holo.onUserActivity() // nicht sofort erneut auslösen, falls der Start scheitert
         // Vollbild-Overlay: kann Android nicht als Hintergrundstart blockieren; Rückfall: Activity
-        if (!overlayShow.show()) Holo.startScreensaver(this)
+        if (!Holo.overlay.show()) Holo.startScreensaver(this)
     }
 
-    private val overlayShow by lazy { at.b05.holopix.screensaver.ScreensaverOverlay(this) }
 
     private fun fmt(ms: Long): String { val s = ms / 1000; return "%d:%02d".format(s / 60, s % 60) }
 

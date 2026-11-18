@@ -63,6 +63,8 @@ class ScreensaverOverlay(private val context: Context) {
     @Suppress("DEPRECATION")
     fun show(): Boolean {
         if (view != null) return true
+        // Bildschirmschoner-Seite läuft schon (z. B. nach Wecken) → kein zweiter darüber
+        if (Holo.activityShowing) return true
         val wm = context.getSystemService(WindowManager::class.java) ?: return false
         val sc = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
         val slides = SlideShow(sc)
@@ -105,8 +107,7 @@ class ScreensaverOverlay(private val context: Context) {
             hideBars(v)
             v.requestFocus()
             view = v; owner = o; scope = sc; params = lp; keepOn = true
-            Holo.screensaverShowing = true
-            Holo.screensaverFinisher = { hide() }
+            Holo.overlayShowing = true
             slides.start()
             sc.launch {
                 while (isActive) {
@@ -162,8 +163,7 @@ class ScreensaverOverlay(private val context: Context) {
         try { context.getSystemService(WindowManager::class.java).removeView(v) } catch (e: Exception) { }
         owner?.stop(); owner = null
         scope?.cancel(); scope = null
-        Holo.screensaverShowing = false
-        Holo.screensaverFinisher = null
+        Holo.overlayShowing = false
         Holo.onUserActivity()
     }
 }

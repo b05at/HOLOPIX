@@ -62,8 +62,18 @@ object Holo {
     /** Letzter Fehler beim Starten des Bildschirmschoners. */
     @Volatile var lastStartError: String? = null
 
-    /** Bildschirmschoner ist gerade sichtbar. */
-    @Volatile var screensaverShowing = false
+    /**
+     * Es gibt zwei Arten Bildschirmschoner: das Vollbild-Overlay (Start nach Leerlauf, im Kiosk-Modus) und die
+     * Bildschirmschoner-Seite (Wecken nach Zeitplan – nur sie kann über dem Sperrbildschirm erscheinen und das
+     * Display einschalten). Es darf immer nur einer sichtbar sein, sonst muss man zweimal tippen.
+     */
+    @Volatile var activityShowing = false
+    @Volatile var overlayShowing = false
+    /** Bildschirmschoner ist gerade sichtbar (egal welche Art). */
+    val screensaverShowing: Boolean get() = activityShowing || overlayShowing
+
+    /** Das Vollbild-Overlay (eine Instanz für die ganze App). Nur im Haupt-Thread verwenden. */
+    val overlay by lazy { at.b05.holopix.screensaver.ScreensaverOverlay(app) }
 
     // ---------- Wetter-Widget (zwischengespeichert, damit der Bildschirmschoner sofort etwas zeigt) ----------
 
@@ -78,7 +88,12 @@ object Holo {
         } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { }
     }
 
+    /**
+     * Bildschirmschoner-Seite starten. Läuft schon das Overlay, bleibt es dabei – außer zum Wecken
+     * (Display aus/gesperrt): dann übernimmt die Seite und blendet das Overlay beim Start aus.
+     */
     fun startScreensaver(c: Context, wake: Boolean = false) {
+        if (overlayShowing && !wake) return
         try {
             c.startActivity(
                 Intent(c, ScreensaverActivity::class.java).putExtra(ScreensaverActivity.EXTRA_WAKE, wake)
@@ -87,9 +102,13 @@ object Holo {
         } catch (e: Exception) { }
     }
 
-    /** Vom sichtbaren Bildschirmschoner gesetzt, damit Zeitplan/Dienst ihn beenden können. */
-    @Volatile var screensaverFinisher: (() -> Unit)? = null
-    fun finishScreensaver() { screensaverFinisher?.invoke() }
+    /** Von der sichtbaren Bildschirmschoner-Seite gesetzt, damit Zeitplan/Dienst sie beenden können. */
+    @Volatile var activityFinisher: (() -> Unit)? = null
+    /** Beendet jeden sichtbaren Bildschirmschoner (Overlay und Seite). */
+    fun finishScreensaver() {
+        if (overlayShowing) android.os.Handler(android.os.Looper.getMainLooper()).post { overlay.hide() }
+        activityFinisher?.invoke()
+    }
 
     // ---------- Besuchermodus & Zeitplan ----------
 
