@@ -124,6 +124,12 @@ class IdleService : Service() {
             val ds = at.b05.holopix.display.DisplaySchedule
             " · außerhalb des Zeitplans (heute ${ds.todayText(ds.fromJson(p.displayPlan))}): Display geht nach dem Android-Zeitlimit aus"
         }
+        // Zeitraum "nur Display": Display bleibt an, aber kein Bildschirmschoner (ein laufender wird beendet)
+        if (!Holo.screensaverAllowed()) {
+            if (Holo.screensaverShowing) Holo.finishScreensaver()
+            status("Zeitraum „nur Display“ – kein Bildschirmschoner (heute ${at.b05.holopix.display.DisplaySchedule.todayText(at.b05.holopix.display.DisplaySchedule.fromJson(p.displayPlan))})")
+            return
+        }
         if (!p.enabled && !p.visitorMode && !p.kioskMode) { status("Automatischer Start ist aus"); return }
         val kiosk = if (p.kioskMode) "Kiosk-Modus · " else ""
         if (Holo.screensaverShowing) { status("${kiosk}Bildschirmschoner läuft$outside"); return }

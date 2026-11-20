@@ -17,8 +17,12 @@ import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.ZoneId
 
-/** Ein Zeitraum, in dem das Display an ist (über Mitternacht möglich, z. B. 22:00–01:00). */
-data class OnWindow(val on: LocalTime, val off: LocalTime) {
+/**
+ * Ein Zeitraum, in dem das Display an ist (über Mitternacht möglich, z. B. 22:00–01:00).
+ * screensaver = false: "nur Display" – zur Startzeit wird nur das Display eingeschaltet und wach gehalten,
+ * in diesem Zeitraum startet kein Bildschirmschoner (z. B. morgens Dashboard/Uhr statt Fotos).
+ */
+data class OnWindow(val on: LocalTime, val off: LocalTime, val screensaver: Boolean = true) {
     fun contains(t: LocalTime): Boolean = when {
         on == off -> true
         on.isBefore(off) -> !t.isBefore(on) && t.isBefore(off)
@@ -46,7 +50,7 @@ object DisplaySchedule {
     fun toJson(plans: List<DayPlan>): String = JSONArray().apply {
         plans.forEach { p ->
             val w = JSONArray()
-            p.windows.forEach { w.put(JSONObject().put("on", it.on.toString()).put("off", it.off.toString())) }
+            p.windows.forEach { w.put(JSONObject().put("on", it.on.toString()).put("off", it.off.toString()).put("s", it.screensaver)) }
             put(JSONObject().put("a", p.active).put("w", w))
         }
     }.toString()
@@ -56,7 +60,7 @@ object DisplaySchedule {
         if (a.length() != 7) DEFAULT else (0 until 7).map {
             val o = a.getJSONObject(it)
             val wins = o.optJSONArray("w")?.let { w ->
-                (0 until w.length()).map { i -> w.getJSONObject(i).let { x -> OnWindow(LocalTime.parse(x.getString("on")), LocalTime.parse(x.getString("off"))) } }
+                (0 until w.length()).map { i -> w.getJSONObject(i).let { x -> OnWindow(LocalTime.parse(x.getString("on")), LocalTime.parse(x.getString("off")), x.optBoolean("s", true)) } }
             } ?: listOf(OnWindow(LocalTime.parse(o.getString("on")), LocalTime.parse(o.getString("off")))) // altes Format
             DayPlan(o.getBoolean("a"), wins)
         }
@@ -73,6 +77,21 @@ object DisplaySchedule {
         return p.windows.any { it.contains(t) }
     }
 
+    /** Aktiver Zeitraum zu diesem Zeitpunkt (null = außerhalb des Zeitplans). */
+    fun windowAt(plans: List<DayPlan>, at: LocalDateTime): OnWindow? {
+        val p = plans[at.dayOfWeek.value - 1]
+        if (!p.active) return null
+        val t = at.toLocalTime()
+        // bei Überschneidung gewinnt ein Zeitraum mit Bildschirmschoner
+        return p.windows.filter { it.contains(t) }.maxByOrNull { if (it.screensaver) 1 else 0 }
+    }
+
+    /**
+     * Darf jetzt ein Bildschirmschoner laufen? Nein nur in einem Zeitraum "nur Display".
+     * Außerhalb des Zeitplans ja (nach Einschalten von Hand bis zum Android-Zeitlimit).
+     */
+    fun screensaverAllowed(plans: List<DayPlan>, at: LocalDateTime): Boolean = windowAt(plans, at)?.screensaver ?: true
+
     /** Heutiger Plan als Text, z. B. „Mittwoch: 06:00–08:30, 16:00–22:00“ oder „Mittwoch: nicht angehakt (aus)“. */
     fun todayText(plans: List<DayPlan>, at: LocalDateTime = LocalDateTime.now()): String {
         val day = at.dayOfWeek.getDisplayName(java.time.format.TextStyle.FULL, java.util.Locale.GERMAN)
@@ -80,7 +99,7 @@ object DisplaySchedule {
         return when {
             !p.active -> "$day: nicht angehakt (Display aus)"
             p.windows.isEmpty() -> "$day: kein Zeitraum (Display aus)"
-            else -> "$day: " + p.windows.joinToString(", ") { "${it.on}–${it.off}" }
+            else -> "$day: " + p.windows.joinToString(", ") { "${it.on}–${it.off}" + if (it.screensaver) "" else " (nur Display)" }
         }
     }
 
@@ -143,7 +162,7 @@ object DisplaySchedule {
      * 2. Vollbild-Benachrichtigung wie bei Wecker-Apps: startet den Bildschirmschoner und schaltet das Display ein (Android 10–15)
      */
     @Suppress("DEPRECATION")
-    fun wakeScreen(context: Context) {
+    fun wakeScreen(context: Context, screensaver: Boolean = true) {
         val pm = context.getSystemService(PowerManager::class.java) ?: return
         try {
             pm.newWakeLock(
@@ -162,10 +181,11 @@ object DisplaySchedule {
                     }
                 )
             }
+            // Ziel: Bildschirmschoner – oder bei "nur Display" eine unsichtbare Seite, die nur einschaltet
+            val target = if (screensaver) Intent(context, ScreensaverActivity::class.java).putExtra(ScreensaverActivity.EXTRA_WAKE, true)
+            else Intent(context, at.b05.holopix.WakeActivity::class.java)
             val pi = PendingIntent.getActivity(
-                context, 4714,
-                Intent(context, ScreensaverActivity::class.java).putExtra(ScreensaverActivity.EXTRA_WAKE, true)
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                context, 4714, target.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
                 PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
             )
             val n = androidx.core.app.NotificationCompat.Builder(context, WAKE_CHANNEL)
@@ -187,18 +207,21 @@ object DisplaySchedule {
      * Display einschalten: immer über die Vollbild-Benachrichtigung (wie Wecker-Apps), zusätzlich direkter Start
      * des Bildschirmschoners. Nach 3 s wird das Ergebnis für die Einstellungen gespeichert.
      */
-    fun wakeChecked(context: Context, pending: android.content.BroadcastReceiver.PendingResult, test: Boolean) {
+    fun wakeChecked(context: Context, pending: android.content.BroadcastReceiver.PendingResult, test: Boolean, screensaver: Boolean = true) {
         val pm = context.getSystemService(PowerManager::class.java)
         val wasOff = pm?.isInteractive == false
-        wakeScreen(context)
-        Holo.startScreensaver(context, wake = true)
+        wakeScreen(context, screensaver)
+        if (screensaver) Holo.startScreensaver(context, wake = true)
+        else try {
+            context.startActivity(Intent(context, at.b05.holopix.WakeActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        } catch (e: Exception) { }
         android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
             try {
                 val time = LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("dd.MM. HH:mm"))
                 val what = if (test) "Test" else "Zeitplan"
                 Holo.prefs.wakeLastResult = when {
                     !wasOff -> if (test) "$time · $what: Display war schon an – zum Testen nach dem Tippen den Ein-/Aus-Knopf drücken" else Holo.prefs.wakeLastResult
-                    pm?.isInteractive == true -> "$time · $what: Display eingeschaltet ✓"
+                    pm?.isInteractive == true -> "$time · $what: Display eingeschaltet ✓" + if (screensaver) "" else " (nur Display)"
                     !fullScreenAllowed(context) -> "$time · $what: Display blieb aus – „Vollbild-Benachrichtigungen“ erlauben"
                     else -> "$time · $what: Display blieb aus"
                 }
@@ -240,10 +263,14 @@ class DisplayAlarmReceiver : BroadcastReceiver() {
             return
         }
         if (prefs.displayScheduleEnabled) {
-            if (DisplaySchedule.isOn(DisplaySchedule.fromJson(prefs.displayPlan), LocalDateTime.now())) {
+            val win = DisplaySchedule.windowAt(DisplaySchedule.fromJson(prefs.displayPlan), LocalDateTime.now())
+            if (win != null) {
                 Holo.onUserActivity()
-                if (Holo.photos.ready) { DisplaySchedule.wakeChecked(context, goAsync(), test = false); DisplaySchedule.reschedule(context); return }
-                DisplaySchedule.wakeScreen(context)
+                // "nur Display": einschalten ohne Bildschirmschoner (auch ohne Fotoquelle möglich)
+                val withSaver = win.screensaver && Holo.photos.ready
+                DisplaySchedule.wakeChecked(context, goAsync(), test = false, screensaver = withSaver)
+                DisplaySchedule.reschedule(context)
+                return
             }
             // Ende eines Zeitraums: nichts erzwingen – der Bildschirmschoner gibt das Display frei
             // und Android schaltet es nach dem eingestellten Zeitlimit aus.

@@ -722,7 +722,10 @@ private fun DisplayScheduleSection(vm: SettingsVm) {
             Hint("Pro Wochentag einen oder mehrere Zeiträume, in denen das Display an ist (z. B. 06:00–08:30 und 16:00–22:00). " +
                 "Zu Beginn eines Zeitraums weckt HOLOPIX das Display und startet den Bildschirmschoner. Außerhalb eines Zeitraums " +
                 "wird das Display nicht geweckt und nicht wach gehalten: schaltest du es selbst ein, startet der Bildschirmschoner nach der " +
-                "eingestellten Zeit trotzdem, Android schaltet das Display aber nach seinem Zeitlimit aus (Einstellungen → Display → Bildschirm-Zeitlimit). Tag nicht angehakt oder ohne Zeitraum = Display bleibt " +
+                "eingestellten Zeit trotzdem, Android schaltet das Display aber nach seinem Zeitlimit aus (Einstellungen → Display → Bildschirm-Zeitlimit). " +
+                "Schalter „Bildschirmschoner“ aus = „nur Display“: zur Startzeit wird nur das Display eingeschaltet und wach gehalten, " +
+                "im Zeitraum startet kein Bildschirmschoner (z. B. morgens Startbildschirm/Dashboard statt Fotos). " +
+                "Tag nicht angehakt oder ohne Zeitraum = Display bleibt " +
                 "an diesem Tag aus. Ganztägig an: Zeitraum 00:00–00:00. Der Besuchermodus hebt den Zeitplan auf.")
             vm.displayPlans.forEachIndexed { i, plan ->
                 Column(Modifier.fillMaxWidth().background(Z.Chip, RoundedCornerShape(12.dp)).padding(8.dp)) {
@@ -746,6 +749,14 @@ private fun DisplayScheduleSection(vm: SettingsVm) {
                                 OutlinedButton(onClick = { pick = Triple(i, wi, true) }) { Text("An ${w.on}") }
                                 Text("–", color = Z.TextSoft, modifier = Modifier.align(Alignment.CenterVertically))
                                 OutlinedButton(onClick = { pick = Triple(i, wi, false) }) { Text("Aus ${w.off}") }
+                                // Schalter: mit Bildschirmschoner oder nur Display einschalten
+                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.align(Alignment.CenterVertically)) {
+                                    Switch(w.screensaver, { on ->
+                                        vm.setDayPlan(i, plan.copy(windows = plan.windows.mapIndexed { k, x -> if (k == wi) x.copy(screensaver = on) else x }))
+                                    })
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(if (w.screensaver) "Bildschirmschoner" else "nur Display", color = if (w.screensaver) Z.Text else Z.TextSoft, fontSize = 14.sp)
+                                }
                                 IconButton(onClick = { vm.setDayPlan(i, plan.copy(windows = plan.windows.filterIndexed { k, _ -> k != wi })) }) {
                                     Icon(Icons.Rounded.Close, "Zeitraum entfernen", tint = Z.TextSoft)
                                 }
@@ -754,8 +765,13 @@ private fun DisplayScheduleSection(vm: SettingsVm) {
                     }
                 }
             }
-            val nowOn = at.b05.holopix.display.DisplaySchedule.isOn(vm.displayPlans, java.time.LocalDateTime.now())
-            Text("Jetzt laut Zeitplan: Display ${if (nowOn) "an – Bildschirmschoner aktiv" else "aus – nur nach Einschalten von Hand, bis zum Android-Zeitlimit"} · " +
+            val nowWin = at.b05.holopix.display.DisplaySchedule.windowAt(vm.displayPlans, java.time.LocalDateTime.now())
+            val nowOn = nowWin != null
+            Text("Jetzt laut Zeitplan: Display ${when {
+                nowWin == null -> "aus – nur nach Einschalten von Hand, bis zum Android-Zeitlimit"
+                nowWin.screensaver -> "an – Bildschirmschoner aktiv"
+                else -> "an – nur Display, kein Bildschirmschoner"
+            }} · " +
                 at.b05.holopix.display.DisplaySchedule.todayText(vm.displayPlans), color = if (nowOn) Z.Primary else Z.Warn, fontSize = 14.sp)
             vm.nextDisplayChangeText()?.let { Text(it, color = Z.TextSoft, fontSize = 14.sp) }
             WakeChecklist(vm)

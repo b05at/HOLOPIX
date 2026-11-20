@@ -53,6 +53,17 @@
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|density|uiMode"
             android:theme="@style/Theme.Holopix.Screensaver" />
 
+        <!-- Display einschalten ohne Bildschirmschoner (Zeitraum "nur Display") -->
+        <activity
+            android:name=".WakeActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:taskAffinity="at.b05.holopix.wake"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
         <!-- Wischsperre wegblenden -->
         <activity
             android:name=".KeyguardActivity"

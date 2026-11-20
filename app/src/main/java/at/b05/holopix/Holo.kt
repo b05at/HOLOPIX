@@ -183,6 +183,11 @@ object Holo {
     fun serviceNeeded(): Boolean = prefs.enabled || prefs.displayScheduleEnabled || prefs.visitorMode || prefs.kioskMode
 
     /** Laut Zeitplan (oder Besuchermodus) soll das Display jetzt an sein. */
+    /** Darf jetzt ein Bildschirmschoner laufen? Nein nur in einem Zeitraum "nur Display" (Besuchermodus hebt das auf). */
+    fun screensaverAllowed(): Boolean = prefs.visitorMode || !prefs.displayScheduleEnabled ||
+        at.b05.holopix.display.DisplaySchedule.screensaverAllowed(
+            at.b05.holopix.display.DisplaySchedule.fromJson(prefs.displayPlan), java.time.LocalDateTime.now())
+
     fun scheduleOn(): Boolean = prefs.visitorMode || !prefs.displayScheduleEnabled ||
         at.b05.holopix.display.DisplaySchedule.isOn(
             at.b05.holopix.display.DisplaySchedule.fromJson(prefs.displayPlan), java.time.LocalDateTime.now())
